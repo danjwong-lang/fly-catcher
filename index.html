@@ -34,24 +34,45 @@
 
   <script>
 // ============================================
-// FLY CATCHER - MVP
+// FLY CATCHER - v2 with Levels
 // ============================================
 
 const CONFIG = {
   width: 390,
-  height: 700,
-  flySpeed: 2.5,
-  hitRadius: 100,
-  comboTimeout: 2000,
-  maxFlies: 1,
-  spawnInterval: 3000
+  height: 700
 };
 
-// Fly class with realistic movement
+const LEVELS = {
+  1: {
+    name: 'Fly Swatter',
+    tool: 'swatter',
+    targetCatches: 10,
+    timeLimit: 30,
+    flySpeed: 2.5,
+    hitRadius: 100,
+    maxFlies: 1,
+    instructions: 'Tap to swat!'
+  },
+  2: {
+    name: 'Rubber Band',
+    tool: 'rubberband',
+    targetCatches: 10,
+    timeLimit: 60,
+    flySpeed: 3.5,
+    hitRadius: 25,
+    maxFlies: 1,
+    instructions: 'Pull back & release to shoot!'
+  }
+};
+
+// ============================================
+// FLY CLASS - Realistic behavior
+// ============================================
 class Fly {
-  constructor(scene, x, y) {
+  constructor(scene, x, y, speed) {
     this.scene = scene;
     this.alive = true;
+    this.maxSpeed = speed || 2.5;
     
     // Create fly graphics
     this.container = scene.add.container(x, y);
@@ -65,7 +86,7 @@ class Fly {
     this.leftWing.setAngle(-20);
     this.rightWing.setAngle(20);
     
-    // Eyes
+    // Eyes (flies have near 360° vision)
     this.leftEye = scene.add.circle(-4, -4, 4, 0xcc0000);
     this.rightEye = scene.add.circle(4, -4, 4, 0xcc0000);
     
@@ -75,15 +96,20 @@ class Fly {
     this.velocity = { x: 0, y: 0 };
     this.targetVelocity = { x: 0, y: 0 };
     this.acceleration = 0.1;
-    this.maxSpeed = CONFIG.flySpeed;
     
     // Behavior state
-    this.state = 'flying'; // flying, resting, fleeing
+    this.state = 'flying'; // flying, resting, fleeing, alert
     this.stateTimer = 0;
-    this.restChance = 0.005;
-    this.restDuration = 500 + Math.random() * 1000;
+    this.restChance = 0.003;
+    this.restDuration = 800 + Math.random() * 1500;
     this.directionChangeTimer = 0;
     this.directionChangeInterval = 500 + Math.random() * 1000;
+    
+    // Threat detection (flies react to fast movement)
+    this.alertDistance = 150;
+    this.reactionTime = 100 + Math.random() * 100; // 100-200ms
+    this.pendingThreat = null;
+    this.threatTimer = 0;
     
     // Wing animation
     this.wingTime = 0;
@@ -93,6 +119,8 @@ class Fly {
   
   get x() { return this.container.x; }
   get y() { return this.container.y; }
+  set x(val) { this.container.x = val; }
+  set y(val) { this.container.y = val; }
   
   pickNewDirection() {
     const angle = Math.random() * Math.PI * 2;
@@ -103,26 +131,46 @@ class Fly {
     this.directionChangeTimer = 0;
   }
   
+  // Called when something fast moves near the fly
+  detectThreat(x, y, speed) {
+    if (this.state === 'fleeing') return;
+    
+    const dist = Phaser.Math.Distance.Between(this.x, this.y, x, y);
+    
+    // Only react to fast-moving threats within alert distance
+    if (dist < this.alertDistance && speed > 5) {
+      this.pendingThreat = { x, y };
+      this.threatTimer = this.reactionTime;
+      this.state = 'alert';
+    }
+  }
+  
   fleeFrom(x, y) {
-    // Fly away from the tap point
+    // Fly away from the threat (opposite direction)
     const dx = this.container.x - x;
     const dy = this.container.y - y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     
     if (dist > 0) {
-      this.targetVelocity.x = (dx / dist) * this.maxSpeed * 1.5;
-      this.targetVelocity.y = (dy / dist) * this.maxSpeed * 1.5;
+      // Flee at maximum speed
+      this.targetVelocity.x = (dx / dist) * this.maxSpeed * 2;
+      this.targetVelocity.y = (dy / dist) * this.maxSpeed * 2;
+      // Immediate velocity boost
+      this.velocity.x = this.targetVelocity.x * 0.5;
+      this.velocity.y = this.targetVelocity.y * 0.5;
     }
     
     this.state = 'fleeing';
-    this.stateTimer = 800;
+    this.stateTimer = 600 + Math.random() * 400;
+    this.pendingThreat = null;
   }
   
   update(delta) {
     if (!this.alive) return;
     
-    // Wing animation
-    this.wingTime += delta * 0.05;
+    // Wing animation (faster when fleeing)
+    const wingSpeed = this.state === 'fleeing' ? 0.08 : 0.05;
+    this.wingTime += delta * wingSpeed;
     const wingFlap = Math.sin(this.wingTime) * 15;
     this.leftWing.setAngle(-20 + wingFlap);
     this.rightWing.setAngle(20 - wingFlap);
@@ -131,8 +179,16 @@ class Fly {
     this.stateTimer -= delta;
     this.directionChangeTimer += delta;
     
+    // Process pending threat reaction
+    if (this.state === 'alert') {
+      this.threatTimer -= delta;
+      if (this.threatTimer <= 0 && this.pendingThreat) {
+        this.fleeFrom(this.pendingThreat.x, this.pendingThreat.y);
+      }
+      return;
+    }
+    
     if (this.state === 'resting') {
-      // Slow down wings while resting
       this.leftWing.setAngle(-10);
       this.rightWing.setAngle(10);
       
@@ -148,7 +204,7 @@ class Fly {
       this.pickNewDirection();
     }
     
-    // Random rest
+    // Random rest (flies land occasionally)
     if (this.state === 'flying' && Math.random() < this.restChance) {
       this.state = 'resting';
       this.stateTimer = this.restDuration;
@@ -163,14 +219,15 @@ class Fly {
     }
     
     // Smooth acceleration toward target velocity
-    this.velocity.x += (this.targetVelocity.x - this.velocity.x) * this.acceleration;
-    this.velocity.y += (this.targetVelocity.y - this.velocity.y) * this.acceleration;
+    const accel = this.state === 'fleeing' ? 0.2 : 0.1;
+    this.velocity.x += (this.targetVelocity.x - this.velocity.x) * accel;
+    this.velocity.y += (this.targetVelocity.y - this.velocity.y) * accel;
     
     // Apply velocity
     this.container.x += this.velocity.x;
     this.container.y += this.velocity.y;
     
-    // Bounce off walls with some randomness
+    // Bounce off walls
     const margin = 30;
     if (this.container.x < margin) {
       this.container.x = margin;
@@ -180,12 +237,12 @@ class Fly {
       this.container.x = CONFIG.width - margin;
       this.targetVelocity.x = -Math.abs(this.targetVelocity.x) * (0.8 + Math.random() * 0.4);
     }
-    if (this.container.y < margin + 60) { // Account for UI
-      this.container.y = margin + 60;
+    if (this.container.y < margin + 80) {
+      this.container.y = margin + 80;
       this.targetVelocity.y = Math.abs(this.targetVelocity.y) * (0.8 + Math.random() * 0.4);
     }
-    if (this.container.y > CONFIG.height - margin) {
-      this.container.y = CONFIG.height - margin;
+    if (this.container.y > CONFIG.height - margin - 100) {
+      this.container.y = CONFIG.height - margin - 100;
       this.targetVelocity.y = -Math.abs(this.targetVelocity.y) * (0.8 + Math.random() * 0.4);
     }
     
@@ -198,7 +255,6 @@ class Fly {
   kill() {
     this.alive = false;
     
-    // Death animation
     this.scene.tweens.add({
       targets: this.container,
       scaleX: 1.5,
@@ -213,17 +269,82 @@ class Fly {
   }
 }
 
-// Main game scene
+// ============================================
+// RUBBER BAND PROJECTILE
+// ============================================
+class RubberBandProjectile {
+  constructor(scene, x, y, velocityX, velocityY) {
+    this.scene = scene;
+    this.active = true;
+    this.speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+    
+    // Create projectile graphic (rubber band ball)
+    this.sprite = scene.add.circle(x, y, 8, 0x8B4513);
+    this.sprite.setStrokeStyle(2, 0x5D3A1A);
+    
+    this.velocity = { x: velocityX, y: velocityY };
+    this.gravity = 0.15; // Gravity effect
+    
+    // Trail effect
+    this.trail = [];
+  }
+  
+  update(delta) {
+    if (!this.active) return;
+    
+    // Store trail position
+    this.trail.push({ x: this.sprite.x, y: this.sprite.y, alpha: 0.5 });
+    if (this.trail.length > 5) {
+      this.trail.shift();
+    }
+    
+    // Apply gravity (more effect on slow shots)
+    const gravityFactor = Math.max(0.5, 1 - (this.speed / 30));
+    this.velocity.y += this.gravity * gravityFactor;
+    
+    // Apply velocity
+    this.sprite.x += this.velocity.x;
+    this.sprite.y += this.velocity.y;
+    
+    // Check bounds
+    if (this.sprite.x < 0 || this.sprite.x > CONFIG.width ||
+        this.sprite.y < 0 || this.sprite.y > CONFIG.height) {
+      this.destroy();
+    }
+  }
+  
+  getSpeed() {
+    return Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
+  }
+  
+  destroy() {
+    this.active = false;
+    this.scene.tweens.add({
+      targets: this.sprite,
+      alpha: 0,
+      scale: 0.5,
+      duration: 100,
+      onComplete: () => this.sprite.destroy()
+    });
+  }
+}
+
+// ============================================
+// GAME SCENE
+// ============================================
 class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GameScene' });
   }
   
+  init(data) {
+    this.currentLevel = data.level || 1;
+    this.levelConfig = LEVELS[this.currentLevel];
+  }
+  
   create() {
     // Background
     this.add.rectangle(CONFIG.width/2, CONFIG.height/2, CONFIG.width, CONFIG.height, 0xf5f5dc);
-    
-    // Add some environment details
     this.add.rectangle(CONFIG.width/2, CONFIG.height - 30, CONFIG.width, 60, 0x8b7355);
     this.add.rectangle(CONFIG.width/2, 30, CONFIG.width, 60, 0xe8e0d0);
     
@@ -241,73 +362,135 @@ class GameScene extends Phaser.Scene {
     this.misses = 0;
     this.flies = [];
     this.gameActive = true;
+    this.timeRemaining = this.levelConfig.timeLimit;
     
-    // UI - Score
-    this.scoreText = this.add.text(20, 20, 'Score: 0', {
-      fontSize: '24px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#333',
-      fontStyle: 'bold'
-    });
+    // Rubber band specific
+    this.projectile = null;
+    this.isDragging = false;
+    this.dragStart = { x: 0, y: 0 };
+    this.anchorPoint = { x: CONFIG.width / 2, y: CONFIG.height - 80 };
+    this.aimLine = null;
+    this.powerIndicator = null;
     
-    // UI - Combo
-    this.comboText = this.add.text(CONFIG.width - 20, 20, '', {
-      fontSize: '20px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#e74c3c',
-      fontStyle: 'bold'
-    }).setOrigin(1, 0);
+    // UI Setup
+    this.createUI();
     
-    // UI - Catches counter
-    this.catchText = this.add.text(20, 50, 'Catches: 0', {
-      fontSize: '16px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#666'
-    });
-    
-    // Fly swatter graphic
-    this.swatter = this.createSwatter();
-    this.swatter.setVisible(false);
-    this.swatter.setDepth(100); // Always on top
+    // Tool-specific setup
+    if (this.levelConfig.tool === 'swatter') {
+      this.setupSwatter();
+    } else if (this.levelConfig.tool === 'rubberband') {
+      this.setupRubberBand();
+    }
     
     // Spawn first fly
     this.spawnFly();
     
-    // Input handling
-    this.input.on('pointerdown', this.handleTap, this);
-    this.input.on('pointermove', this.handleMove, this);
-    
-    // Spawn timer for additional flies
-    this.spawnTimer = this.time.addEvent({
-      delay: CONFIG.spawnInterval,
-      callback: this.maybeSpawnFly,
+    // Timer
+    this.timerEvent = this.time.addEvent({
+      delay: 1000,
+      callback: this.updateTimer,
       callbackScope: this,
       loop: true
     });
   }
   
+  createUI() {
+    // Level name
+    this.add.text(CONFIG.width/2, 15, `Level ${this.currentLevel}: ${this.levelConfig.name}`, {
+      fontSize: '16px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#666',
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0);
+    
+    // Timer
+    this.timerText = this.add.text(CONFIG.width/2, 45, this.formatTime(this.timeRemaining), {
+      fontSize: '32px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#333',
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0);
+    
+    // Progress (catches)
+    this.progressText = this.add.text(20, 85, `Catches: 0/${this.levelConfig.targetCatches}`, {
+      fontSize: '18px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#333'
+    });
+    
+    // Score
+    this.scoreText = this.add.text(CONFIG.width - 20, 85, 'Score: 0', {
+      fontSize: '18px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#333'
+    }).setOrigin(1, 0);
+    
+    // Combo
+    this.comboText = this.add.text(CONFIG.width/2, 120, '', {
+      fontSize: '24px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#e74c3c',
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0);
+  }
+  
+  formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
+  }
+  
+  updateTimer() {
+    if (!this.gameActive) return;
+    
+    this.timeRemaining--;
+    this.timerText.setText(this.formatTime(this.timeRemaining));
+    
+    // Flash red when low
+    if (this.timeRemaining <= 5) {
+      this.timerText.setColor('#e74c3c');
+      this.tweens.add({
+        targets: this.timerText,
+        scale: 1.2,
+        duration: 100,
+        yoyo: true
+      });
+    }
+    
+    if (this.timeRemaining <= 0) {
+      this.endGame(false);
+    }
+  }
+  
+  // ============================================
+  // SWATTER TOOL
+  // ============================================
+  setupSwatter() {
+    this.swatter = this.createSwatter();
+    this.swatter.setVisible(false);
+    this.swatter.setDepth(100);
+    
+    this.input.on('pointermove', this.handleSwatterMove, this);
+    this.input.on('pointerdown', this.handleSwatterTap, this);
+  }
+  
   createSwatter() {
     const swatter = this.add.container(0, 0);
     
-    // Handle
     const handle = this.add.rectangle(0, 70, 12, 100, 0x8B4513);
     handle.setStrokeStyle(2, 0x5D3A1A);
     
-    // Swatter head
     const head = this.add.ellipse(0, 0, 80, 90, 0x222222);
     head.setStrokeStyle(3, 0x111111);
     
-    // Mesh pattern (grid lines)
     const meshGraphics = this.add.graphics();
     meshGraphics.lineStyle(1, 0x444444, 0.8);
     
-    // Horizontal lines
     for (let y = -35; y <= 35; y += 10) {
       const width = Math.sqrt(1 - (y/45)**2) * 38;
       meshGraphics.lineBetween(-width, y, width, y);
     }
     
-    // Vertical lines
     for (let x = -35; x <= 35; x += 10) {
       const height = Math.sqrt(1 - (x/40)**2) * 42;
       meshGraphics.lineBetween(x, -height, x, height);
@@ -319,19 +502,19 @@ class GameScene extends Phaser.Scene {
     return swatter;
   }
   
-  handleMove(pointer) {
+  handleSwatterMove(pointer) {
     this.swatter.setPosition(pointer.x, pointer.y);
     this.swatter.setVisible(true);
-    this.swatter.setAngle(-15); // Ready position
+    this.swatter.setAngle(-15);
   }
   
-  handleTap(pointer) {
+  handleSwatterTap(pointer) {
     if (!this.gameActive) return;
     
     const tapX = pointer.x;
     const tapY = pointer.y;
     
-    // Animate the swatter - quick swat motion
+    // Animate swatter
     this.swatter.setPosition(tapX, tapY);
     this.tweens.add({
       targets: this.swatter,
@@ -349,12 +532,10 @@ class GameScene extends Phaser.Scene {
       
       const distance = Phaser.Math.Distance.Between(tapX, tapY, fly.x, fly.y);
       
-      if (distance < CONFIG.hitRadius) {
-        // HIT!
+      if (distance < this.levelConfig.hitRadius) {
         hitAny = true;
-        this.catchFly(fly, tapX, tapY);
-      } else if (distance < CONFIG.hitRadius * 2) {
-        // Near miss - fly reacts
+        this.catchFly(fly, tapX, tapY, 1);
+      } else if (distance < this.levelConfig.hitRadius * 2) {
         fly.fleeFrom(tapX, tapY);
       }
     });
@@ -364,80 +545,266 @@ class GameScene extends Phaser.Scene {
     }
   }
   
-  showTapEffect(x, y) {
-    // Swat visual
-    const swatCircle = this.add.circle(x, y, 10, 0x333333, 0.3);
+  // ============================================
+  // RUBBER BAND TOOL
+  // ============================================
+  setupRubberBand() {
+    // Anchor point visual
+    this.anchorVisual = this.add.container(this.anchorPoint.x, this.anchorPoint.y);
     
+    // Slingshot frame
+    const leftPost = this.add.rectangle(-25, -20, 8, 50, 0x8B4513);
+    const rightPost = this.add.rectangle(25, -20, 8, 50, 0x8B4513);
+    const base = this.add.rectangle(0, 10, 60, 12, 0x5D3A1A);
+    
+    this.anchorVisual.add([base, leftPost, rightPost]);
+    
+    // Rubber band graphics (will be drawn dynamically)
+    this.bandGraphics = this.add.graphics();
+    this.bandGraphics.setDepth(50);
+    
+    // Power meter background
+    this.powerMeterBg = this.add.rectangle(CONFIG.width - 30, CONFIG.height/2, 20, 200, 0x333333, 0.3);
+    this.powerMeterFill = this.add.rectangle(CONFIG.width - 30, CONFIG.height/2 + 100, 16, 0, 0xe74c3c);
+    this.powerMeterFill.setOrigin(0.5, 1);
+    
+    // Trajectory preview
+    this.trajectoryGraphics = this.add.graphics();
+    this.trajectoryGraphics.setDepth(40);
+    
+    // Instructions
+    this.instructionText = this.add.text(CONFIG.width/2, CONFIG.height - 30, 'Pull back to aim, release to fire!', {
+      fontSize: '14px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#666'
+    }).setOrigin(0.5);
+    
+    // Input handlers
+    this.input.on('pointerdown', this.handleRubberBandStart, this);
+    this.input.on('pointermove', this.handleRubberBandDrag, this);
+    this.input.on('pointerup', this.handleRubberBandRelease, this);
+  }
+  
+  handleRubberBandStart(pointer) {
+    if (!this.gameActive || this.projectile) return;
+    
+    // Only start drag if near the anchor
+    const dist = Phaser.Math.Distance.Between(pointer.x, pointer.y, this.anchorPoint.x, this.anchorPoint.y);
+    if (dist < 100) {
+      this.isDragging = true;
+      this.dragStart = { x: pointer.x, y: pointer.y };
+    }
+  }
+  
+  handleRubberBandDrag(pointer) {
+    if (!this.isDragging || !this.gameActive) return;
+    
+    // Calculate pull vector (from pointer back to anchor)
+    const pullX = this.anchorPoint.x - pointer.x;
+    const pullY = this.anchorPoint.y - pointer.y;
+    const pullDistance = Math.min(Math.sqrt(pullX * pullX + pullY * pullY), 150);
+    const pullAngle = Math.atan2(pullY, pullX);
+    
+    // Constrain pull point
+    const constrainedX = this.anchorPoint.x - Math.cos(pullAngle) * pullDistance;
+    const constrainedY = this.anchorPoint.y - Math.sin(pullAngle) * pullDistance;
+    
+    // Draw rubber band
+    this.bandGraphics.clear();
+    this.bandGraphics.lineStyle(4, 0x8B4513);
+    
+    // Left band
+    this.bandGraphics.lineBetween(
+      this.anchorPoint.x - 25, this.anchorPoint.y - 40,
+      constrainedX, constrainedY
+    );
+    
+    // Right band
+    this.bandGraphics.lineBetween(
+      this.anchorPoint.x + 25, this.anchorPoint.y - 40,
+      constrainedX, constrainedY
+    );
+    
+    // Projectile preview at pull point
+    this.bandGraphics.fillStyle(0x8B4513);
+    this.bandGraphics.fillCircle(constrainedX, constrainedY, 10);
+    
+    // Update power meter
+    const power = pullDistance / 150;
+    this.powerMeterFill.setSize(16, power * 196);
+    
+    // Color based on power
+    if (power < 0.3) {
+      this.powerMeterFill.setFillStyle(0xf39c12); // Orange - weak
+    } else if (power < 0.7) {
+      this.powerMeterFill.setFillStyle(0x27ae60); // Green - good
+    } else {
+      this.powerMeterFill.setFillStyle(0xe74c3c); // Red - powerful
+    }
+    
+    // Draw trajectory preview
+    this.drawTrajectory(constrainedX, constrainedY, pullDistance, pullAngle);
+    
+    // Alert flies to the pulling motion (slow, so low threat)
+    this.flies.forEach(fly => fly.detectThreat(constrainedX, constrainedY, 2));
+  }
+  
+  drawTrajectory(startX, startY, power, angle) {
+    this.trajectoryGraphics.clear();
+    this.trajectoryGraphics.lineStyle(2, 0x333333, 0.3);
+    
+    const velocityMagnitude = power * 0.2;
+    let vx = Math.cos(angle) * velocityMagnitude * 60;
+    let vy = Math.sin(angle) * velocityMagnitude * 60;
+    
+    let x = startX;
+    let y = startY;
+    
+    const points = [{ x, y }];
+    const gravityFactor = Math.max(0.5, 1 - (power / 150));
+    
+    for (let i = 0; i < 30; i++) {
+      vy += 0.15 * gravityFactor;
+      x += vx * 0.5;
+      y += vy * 0.5;
+      
+      if (y > CONFIG.height || x < 0 || x > CONFIG.width) break;
+      points.push({ x, y });
+    }
+    
+    // Draw dotted line
+    for (let i = 0; i < points.length - 1; i += 2) {
+      if (points[i + 1]) {
+        this.trajectoryGraphics.lineBetween(
+          points[i].x, points[i].y,
+          points[i + 1].x, points[i + 1].y
+        );
+      }
+    }
+  }
+  
+  handleRubberBandRelease(pointer) {
+    if (!this.isDragging || !this.gameActive) return;
+    
+    this.isDragging = false;
+    
+    // Calculate launch velocity
+    const pullX = this.anchorPoint.x - pointer.x;
+    const pullY = this.anchorPoint.y - pointer.y;
+    const pullDistance = Math.min(Math.sqrt(pullX * pullX + pullY * pullY), 150);
+    
+    if (pullDistance < 20) {
+      // Not enough pull, cancel
+      this.bandGraphics.clear();
+      this.trajectoryGraphics.clear();
+      this.powerMeterFill.setSize(16, 0);
+      return;
+    }
+    
+    const pullAngle = Math.atan2(pullY, pullX);
+    const velocityMagnitude = pullDistance * 0.2;
+    
+    const vx = Math.cos(pullAngle) * velocityMagnitude;
+    const vy = Math.sin(pullAngle) * velocityMagnitude;
+    
+    // Create projectile
+    const startX = this.anchorPoint.x - Math.cos(pullAngle) * pullDistance;
+    const startY = this.anchorPoint.y - Math.sin(pullAngle) * pullDistance;
+    
+    this.projectile = new RubberBandProjectile(this, startX, startY, vx, vy);
+    
+    // Clear visuals
+    this.bandGraphics.clear();
+    this.trajectoryGraphics.clear();
+    this.powerMeterFill.setSize(16, 0);
+    
+    // Animate slingshot snap
     this.tweens.add({
-      targets: swatCircle,
-      radius: CONFIG.hitRadius,
-      alpha: 0,
-      duration: 200,
-      ease: 'Power2',
-      onComplete: () => swatCircle.destroy()
+      targets: this.anchorVisual,
+      scaleX: 1.1,
+      duration: 50,
+      yoyo: true
     });
   }
   
-  catchFly(fly, tapX, tapY) {
+  // ============================================
+  // COMMON GAME METHODS
+  // ============================================
+  spawnFly() {
+    const margin = 50;
+    const x = margin + Math.random() * (CONFIG.width - margin * 2);
+    const y = 120 + Math.random() * (CONFIG.height - 300);
+    
+    const fly = new Fly(this, x, y, this.levelConfig.flySpeed);
+    this.flies.push(fly);
+  }
+  
+  catchFly(fly, hitX, hitY, speedBonus) {
     fly.kill();
     this.catches++;
     
-    // Show splat effect
+    // Show splat
     this.showSplatEffect(fly.x, fly.y);
     
     // Update combo
     this.combo++;
-    this.comboTimer = CONFIG.comboTimeout;
+    this.comboTimer = 2000;
     
     // Calculate score
     const basePoints = 100;
     const comboMultiplier = Math.min(this.combo, 10);
-    const points = basePoints * comboMultiplier;
+    const velocityBonus = speedBonus > 1.5 ? 50 : 0; // Bonus for powerful hits
+    const points = (basePoints + velocityBonus) * comboMultiplier;
     this.score += points;
     
     // Update UI
     this.scoreText.setText(`Score: ${this.score}`);
-    this.catchText.setText(`Catches: ${this.catches}`);
+    this.progressText.setText(`Catches: ${this.catches}/${this.levelConfig.targetCatches}`);
     
     if (this.combo > 1) {
       this.comboText.setText(`${this.combo}x COMBO!`);
-      this.comboText.setScale(1.2);
       this.tweens.add({
         targets: this.comboText,
-        scale: 1,
-        duration: 200
+        scale: 1.2,
+        duration: 100,
+        yoyo: true
       });
     }
     
-    // Show points popup
+    // Velocity bonus popup
+    if (velocityBonus > 0) {
+      this.showBonusPopup(fly.x, fly.y - 30, 'POWER HIT!');
+    }
+    
     this.showPointsPopup(fly.x, fly.y, points, this.combo);
     
-    // Screen shake for satisfaction
+    // Screen effects
     this.cameras.main.shake(100, 0.01);
-    
-    // Flash effect
-    this.cameras.main.flash(100, 255, 255, 255, false, null, this);
+    this.cameras.main.flash(100, 255, 255, 255, false);
     
     // Remove from array
     this.flies = this.flies.filter(f => f !== fly);
     
-    // Spawn new fly after short delay
-    this.time.delayedCall(500, () => {
-      if (this.flies.length < CONFIG.maxFlies) {
+    // Check win condition
+    if (this.catches >= this.levelConfig.targetCatches) {
+      this.endGame(true);
+      return;
+    }
+    
+    // Spawn new fly
+    this.time.delayedCall(300, () => {
+      if (this.flies.length < this.levelConfig.maxFlies && this.gameActive) {
         this.spawnFly();
       }
     });
   }
   
   showSplatEffect(x, y) {
-    // Splat marks
     const splat = this.add.container(x, y);
     
-    // Main splat
     const mainSplat = this.add.circle(0, 0, 15, 0x333333, 0.6);
     splat.add(mainSplat);
     
-    // Splatter dots
     for (let i = 0; i < 6; i++) {
       const angle = (i / 6) * Math.PI * 2;
       const dist = 15 + Math.random() * 15;
@@ -447,7 +814,6 @@ class GameScene extends Phaser.Scene {
       splat.add(dot);
     }
     
-    // Fade out over time
     this.tweens.add({
       targets: splat,
       alpha: 0,
@@ -459,7 +825,7 @@ class GameScene extends Phaser.Scene {
   
   showPointsPopup(x, y, points, combo) {
     const color = combo > 1 ? '#e74c3c' : '#27ae60';
-    const text = combo > 1 ? `+${points} (${combo}x)` : `+${points}`;
+    const text = combo > 1 ? `+${points}` : `+${points}`;
     
     const popup = this.add.text(x, y, text, {
       fontSize: combo > 1 ? '28px' : '24px',
@@ -481,6 +847,25 @@ class GameScene extends Phaser.Scene {
     });
   }
   
+  showBonusPopup(x, y, text) {
+    const popup = this.add.text(x, y, text, {
+      fontSize: '20px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#f39c12',
+      fontStyle: 'bold',
+      stroke: '#fff',
+      strokeThickness: 2
+    }).setOrigin(0.5);
+    
+    this.tweens.add({
+      targets: popup,
+      y: y - 40,
+      alpha: 0,
+      duration: 800,
+      onComplete: () => popup.destroy()
+    });
+  }
+  
   handleMiss() {
     this.misses++;
     this.combo = 0;
@@ -488,24 +873,63 @@ class GameScene extends Phaser.Scene {
     this.comboText.setText('');
   }
   
-  spawnFly() {
-    const margin = 50;
-    const x = margin + Math.random() * (CONFIG.width - margin * 2);
-    const y = 100 + Math.random() * (CONFIG.height - 200);
+  endGame(won) {
+    this.gameActive = false;
+    if (this.timerEvent) this.timerEvent.remove();
     
-    const fly = new Fly(this, x, y);
-    this.flies.push(fly);
-  }
-  
-  maybeSpawnFly() {
-    if (this.flies.length < CONFIG.maxFlies) {
-      this.spawnFly();
-    }
+    // Delay before showing result
+    this.time.delayedCall(500, () => {
+      this.scene.start('ResultScene', {
+        won: won,
+        level: this.currentLevel,
+        score: this.score,
+        catches: this.catches,
+        target: this.levelConfig.targetCatches,
+        timeRemaining: this.timeRemaining
+      });
+    });
   }
   
   update(time, delta) {
-    // Update all flies
+    // Update flies
     this.flies.forEach(fly => fly.update(delta));
+    
+    // Update projectile (rubber band mode)
+    if (this.projectile && this.projectile.active) {
+      this.projectile.update(delta);
+      
+      // Check collision with flies
+      this.flies.forEach(fly => {
+        if (!fly.alive || !this.projectile.active) return;
+        
+        const dist = Phaser.Math.Distance.Between(
+          this.projectile.sprite.x, this.projectile.sprite.y,
+          fly.x, fly.y
+        );
+        
+        // Alert fly to fast-moving projectile
+        fly.detectThreat(this.projectile.sprite.x, this.projectile.sprite.y, this.projectile.getSpeed());
+        
+        if (dist < this.levelConfig.hitRadius + 10) {
+          // Hit! Speed bonus for powerful shots
+          const speedBonus = this.projectile.getSpeed() / 10;
+          this.catchFly(fly, this.projectile.sprite.x, this.projectile.sprite.y, speedBonus);
+          this.projectile.destroy();
+          this.projectile = null;
+        }
+      });
+      
+      // Projectile out of bounds
+      if (this.projectile && !this.projectile.active) {
+        this.projectile = null;
+        this.handleMiss();
+      }
+    }
+    
+    // Clean up destroyed projectile
+    if (this.projectile && !this.projectile.active) {
+      this.projectile = null;
+    }
     
     // Update combo timer
     if (this.comboTimer > 0) {
@@ -518,82 +942,190 @@ class GameScene extends Phaser.Scene {
   }
 }
 
-// Menu scene
+// ============================================
+// RESULT SCENE
+// ============================================
+class ResultScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'ResultScene' });
+  }
+  
+  init(data) {
+    this.won = data.won;
+    this.level = data.level;
+    this.score = data.score;
+    this.catches = data.catches;
+    this.target = data.target;
+    this.timeRemaining = data.timeRemaining;
+  }
+  
+  create() {
+    this.add.rectangle(CONFIG.width/2, CONFIG.height/2, CONFIG.width, CONFIG.height, 0x1a1a2e);
+    
+    // Result header
+    const headerText = this.won ? 'LEVEL COMPLETE!' : 'TIME\'S UP!';
+    const headerColor = this.won ? '#27ae60' : '#e74c3c';
+    
+    this.add.text(CONFIG.width/2, 150, headerText, {
+      fontSize: '36px',
+      fontFamily: 'Arial, sans-serif',
+      color: headerColor,
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // Stats
+    this.add.text(CONFIG.width/2, 250, `Catches: ${this.catches}/${this.target}`, {
+      fontSize: '24px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#fff'
+    }).setOrigin(0.5);
+    
+    this.add.text(CONFIG.width/2, 300, `Score: ${this.score}`, {
+      fontSize: '28px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#f39c12',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    if (this.won && this.timeRemaining > 0) {
+      this.add.text(CONFIG.width/2, 350, `Time Bonus: +${this.timeRemaining * 10}`, {
+        fontSize: '20px',
+        fontFamily: 'Arial, sans-serif',
+        color: '#3498db'
+      }).setOrigin(0.5);
+    }
+    
+    // Buttons
+    const buttonY = 480;
+    
+    if (this.won && LEVELS[this.level + 1]) {
+      // Next Level button
+      const nextBtn = this.add.rectangle(CONFIG.width/2, buttonY, 200, 50, 0x27ae60)
+        .setInteractive({ useHandCursor: true });
+      
+      this.add.text(CONFIG.width/2, buttonY, 'NEXT LEVEL', {
+        fontSize: '22px',
+        fontFamily: 'Arial, sans-serif',
+        color: '#fff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      
+      nextBtn.on('pointerover', () => nextBtn.setFillStyle(0x2ecc71));
+      nextBtn.on('pointerout', () => nextBtn.setFillStyle(0x27ae60));
+      nextBtn.on('pointerdown', () => {
+        this.scene.start('GameScene', { level: this.level + 1 });
+      });
+    }
+    
+    // Retry button
+    const retryY = this.won && LEVELS[this.level + 1] ? buttonY + 70 : buttonY;
+    const retryBtn = this.add.rectangle(CONFIG.width/2, retryY, 200, 50, 0x3498db)
+      .setInteractive({ useHandCursor: true });
+    
+    this.add.text(CONFIG.width/2, retryY, 'RETRY', {
+      fontSize: '22px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#fff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    retryBtn.on('pointerover', () => retryBtn.setFillStyle(0x5dade2));
+    retryBtn.on('pointerout', () => retryBtn.setFillStyle(0x3498db));
+    retryBtn.on('pointerdown', () => {
+      this.scene.start('GameScene', { level: this.level });
+    });
+    
+    // Menu button
+    const menuBtn = this.add.rectangle(CONFIG.width/2, retryY + 70, 200, 50, 0x95a5a6)
+      .setInteractive({ useHandCursor: true });
+    
+    this.add.text(CONFIG.width/2, retryY + 70, 'MENU', {
+      fontSize: '22px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#fff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    menuBtn.on('pointerover', () => menuBtn.setFillStyle(0xbdc3c7));
+    menuBtn.on('pointerout', () => menuBtn.setFillStyle(0x95a5a6));
+    menuBtn.on('pointerdown', () => {
+      this.scene.start('MenuScene');
+    });
+  }
+}
+
+// ============================================
+// MENU SCENE
+// ============================================
 class MenuScene extends Phaser.Scene {
   constructor() {
     super({ key: 'MenuScene' });
   }
   
   create() {
-    // Background
     this.add.rectangle(CONFIG.width/2, CONFIG.height/2, CONFIG.width, CONFIG.height, 0x1a1a2e);
     
     // Title
-    this.add.text(CONFIG.width/2, 200, '🪰', {
+    this.add.text(CONFIG.width/2, 150, '🪰', {
       fontSize: '80px'
     }).setOrigin(0.5);
     
-    this.add.text(CONFIG.width/2, 300, 'FLY CATCHER', {
+    this.add.text(CONFIG.width/2, 250, 'FLY CATCHER', {
       fontSize: '42px',
       fontFamily: 'Arial, sans-serif',
       color: '#fff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    this.add.text(CONFIG.width/2, 360, 'Tap to swat the flies!', {
-      fontSize: '18px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#aaa'
-    }).setOrigin(0.5);
+    // Level buttons
+    let btnY = 380;
     
-    // Play button
-    const playBtn = this.add.rectangle(CONFIG.width/2, 480, 200, 60, 0x27ae60, 1)
-      .setInteractive({ useHandCursor: true });
-    
-    const playText = this.add.text(CONFIG.width/2, 480, 'PLAY', {
-      fontSize: '28px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#fff',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-    
-    playBtn.on('pointerover', () => {
-      playBtn.setFillStyle(0x2ecc71);
+    Object.keys(LEVELS).forEach(levelNum => {
+      const level = LEVELS[levelNum];
+      
+      const btn = this.add.rectangle(CONFIG.width/2, btnY, 280, 60, 0x27ae60)
+        .setInteractive({ useHandCursor: true });
+      
+      this.add.text(CONFIG.width/2, btnY - 8, `Level ${levelNum}: ${level.name}`, {
+        fontSize: '20px',
+        fontFamily: 'Arial, sans-serif',
+        color: '#fff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      
+      this.add.text(CONFIG.width/2, btnY + 14, level.instructions, {
+        fontSize: '12px',
+        fontFamily: 'Arial, sans-serif',
+        color: '#ccc'
+      }).setOrigin(0.5);
+      
+      btn.on('pointerover', () => btn.setFillStyle(0x2ecc71));
+      btn.on('pointerout', () => btn.setFillStyle(0x27ae60));
+      btn.on('pointerdown', () => {
+        this.scene.start('GameScene', { level: parseInt(levelNum) });
+      });
+      
+      btnY += 90;
     });
-    
-    playBtn.on('pointerout', () => {
-      playBtn.setFillStyle(0x27ae60);
-    });
-    
-    playBtn.on('pointerdown', () => {
-      this.scene.start('GameScene');
-    });
-    
-    // Instructions
-    this.add.text(CONFIG.width/2, 580, 'Build combos for bonus points!\nFlies flee from near misses.', {
-      fontSize: '14px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#666',
-      align: 'center'
-    }).setOrigin(0.5);
   }
 }
 
-// Phaser game config
+// ============================================
+// GAME CONFIG
+// ============================================
 const config = {
   type: Phaser.AUTO,
   width: CONFIG.width,
   height: CONFIG.height,
   parent: 'game-container',
   backgroundColor: '#1a1a2e',
-  scene: [MenuScene, GameScene],
+  scene: [MenuScene, GameScene, ResultScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   }
 };
 
-// Start game
 const game = new Phaser.Game(config);
   </script>
 </body>
