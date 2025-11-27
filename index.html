@@ -241,8 +241,8 @@ class Fly {
       this.container.y = margin + 80;
       this.targetVelocity.y = Math.abs(this.targetVelocity.y) * (0.8 + Math.random() * 0.4);
     }
-    if (this.container.y > CONFIG.height - margin - 100) {
-      this.container.y = CONFIG.height - margin - 100;
+    if (this.container.y > CONFIG.height - margin - 200) {
+      this.container.y = CONFIG.height - margin - 200;
       this.targetVelocity.y = -Math.abs(this.targetVelocity.y) * (0.8 + Math.random() * 0.4);
     }
     
@@ -368,7 +368,7 @@ class GameScene extends Phaser.Scene {
     this.projectile = null;
     this.isDragging = false;
     this.dragStart = { x: 0, y: 0 };
-    this.anchorPoint = { x: CONFIG.width / 2, y: CONFIG.height - 80 };
+    this.anchorPoint = { x: CONFIG.width / 2, y: CONFIG.height - 180 };
     this.aimLine = null;
     this.powerIndicator = null;
     
@@ -573,7 +573,7 @@ class GameScene extends Phaser.Scene {
     this.trajectoryGraphics.setDepth(40);
     
     // Instructions
-    this.instructionText = this.add.text(CONFIG.width/2, CONFIG.height - 30, 'Pull back to aim, release to fire!', {
+    this.instructionText = this.add.text(CONFIG.width/2, CONFIG.height - 120, 'Touch below & pull back to aim!', {
       fontSize: '14px',
       fontFamily: 'Arial, sans-serif',
       color: '#666'
@@ -588,9 +588,8 @@ class GameScene extends Phaser.Scene {
   handleRubberBandStart(pointer) {
     if (!this.gameActive || this.projectile) return;
     
-    // Only start drag if near the anchor
-    const dist = Phaser.Math.Distance.Between(pointer.x, pointer.y, this.anchorPoint.x, this.anchorPoint.y);
-    if (dist < 100) {
+    // Larger touch area for mobile - anywhere in bottom third of screen
+    if (pointer.y > CONFIG.height - 300) {
       this.isDragging = true;
       this.dragStart = { x: pointer.x, y: pointer.y };
     }
@@ -733,7 +732,7 @@ class GameScene extends Phaser.Scene {
   spawnFly() {
     const margin = 50;
     const x = margin + Math.random() * (CONFIG.width - margin * 2);
-    const y = 120 + Math.random() * (CONFIG.height - 300);
+    const y = 120 + Math.random() * (CONFIG.height - 400);
     
     const fly = new Fly(this, x, y, this.levelConfig.flySpeed);
     this.flies.push(fly);
