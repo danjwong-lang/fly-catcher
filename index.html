@@ -6,13 +6,9 @@
   <title>Fly Catcher</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #1a1a2e;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -23,9 +19,9 @@
     }
     #game-container {
       position: relative;
-      border-radius: 12px;
+      border-radius: 16px;
       overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      box-shadow: 0 25px 80px rgba(0,0,0,0.6);
     }
   </style>
 </head>
@@ -34,7 +30,7 @@
 
   <script>
 // ============================================
-// FLY CATCHER - v2 with Levels
+// FLY CATCHER - v3 Polished
 // ============================================
 
 const CONFIG = {
@@ -49,9 +45,9 @@ const LEVELS = {
     targetCatches: 10,
     timeLimit: 30,
     flySpeed: 2.5,
-    hitRadius: 100,
+    hitRadius: 60,
     maxFlies: 1,
-    instructions: 'Tap to swat!'
+    instructions: 'Tap to swat! Avoid the furniture!'
   },
   2: {
     name: 'Rubber Band',
@@ -66,7 +62,223 @@ const LEVELS = {
 };
 
 // ============================================
-// FLY CLASS - Realistic behavior
+// FURNITURE / DESTRUCTIBLE OBJECTS
+// ============================================
+class Furniture {
+  constructor(scene, x, y, type) {
+    this.scene = scene;
+    this.x = x;
+    this.y = y;
+    this.type = type;
+    this.destroyed = false;
+    this.container = scene.add.container(x, y);
+    this.hitArea = null;
+    this.pointPenalty = 50;
+    
+    this.create();
+  }
+  
+  create() {
+    switch(this.type) {
+      case 'vase':
+        this.createVase();
+        this.hitArea = new Phaser.Geom.Circle(0, -30, 35);
+        this.pointPenalty = 100;
+        break;
+      case 'lamp':
+        this.createLamp();
+        this.hitArea = new Phaser.Geom.Circle(0, -60, 40);
+        this.pointPenalty = 75;
+        break;
+      case 'plant':
+        this.createPlant();
+        this.hitArea = new Phaser.Geom.Circle(0, -40, 45);
+        this.pointPenalty = 50;
+        break;
+      case 'frame':
+        this.createFrame();
+        this.hitArea = new Phaser.Geom.Rectangle(-35, -45, 70, 90);
+        this.pointPenalty = 60;
+        break;
+      case 'wineglass':
+        this.createWineGlass();
+        this.hitArea = new Phaser.Geom.Circle(0, -25, 25);
+        this.pointPenalty = 120;
+        break;
+    }
+  }
+  
+  createVase() {
+    // Shadow
+    const shadow = this.scene.add.ellipse(0, 5, 40, 12, 0x000000, 0.2);
+    
+    // Vase body - gradient effect with multiple shapes
+    const vaseBase = this.scene.add.ellipse(0, -5, 35, 15, 0x1e88e5);
+    const vaseBody = this.scene.add.ellipse(0, -30, 45, 50, 0x2196f3);
+    const vaseNeck = this.scene.add.ellipse(0, -55, 25, 15, 0x1976d2);
+    const vaseRim = this.scene.add.ellipse(0, -62, 30, 10, 0x1565c0);
+    
+    // Highlight
+    const highlight = this.scene.add.ellipse(-10, -35, 8, 20, 0x64b5f6, 0.6);
+    
+    // Flowers
+    const stem1 = this.scene.add.rectangle(-5, -85, 3, 40, 0x2e7d32);
+    const stem2 = this.scene.add.rectangle(5, -90, 3, 45, 0x388e3c);
+    const flower1 = this.scene.add.circle(-5, -105, 12, 0xe91e63);
+    const flower2 = this.scene.add.circle(5, -115, 10, 0xf48fb1);
+    const flowerCenter1 = this.scene.add.circle(-5, -105, 5, 0xffeb3b);
+    const flowerCenter2 = this.scene.add.circle(5, -115, 4, 0xfff59d);
+    
+    this.container.add([shadow, vaseBase, vaseBody, vaseNeck, vaseRim, highlight, stem1, stem2, flower1, flower2, flowerCenter1, flowerCenter2]);
+  }
+  
+  createLamp() {
+    // Shadow
+    const shadow = this.scene.add.ellipse(0, 5, 50, 15, 0x000000, 0.2);
+    
+    // Base
+    const base = this.scene.add.ellipse(0, 0, 50, 15, 0x5d4037);
+    const baseTop = this.scene.add.ellipse(0, -5, 40, 12, 0x6d4c41);
+    
+    // Pole
+    const pole = this.scene.add.rectangle(0, -50, 8, 80, 0x8d6e63);
+    const poleHighlight = this.scene.add.rectangle(-2, -50, 2, 80, 0xa1887f, 0.5);
+    
+    // Lampshade
+    const shadeOuter = this.scene.add.triangle(0, -100, -40, 0, 40, 0, 0, -50, 0xfff8e1);
+    const shadeInner = this.scene.add.triangle(0, -100, -35, -2, 35, -2, 0, -45, 0xffecb3);
+    
+    // Glow effect
+    const glow = this.scene.add.circle(0, -90, 30, 0xffeb3b, 0.2);
+    
+    this.container.add([shadow, base, baseTop, pole, poleHighlight, glow, shadeOuter, shadeInner]);
+  }
+  
+  createPlant() {
+    // Pot shadow
+    const shadow = this.scene.add.ellipse(0, 5, 55, 15, 0x000000, 0.2);
+    
+    // Pot
+    const potBottom = this.scene.add.rectangle(0, -5, 50, 25, 0xd84315);
+    const potRim = this.scene.add.rectangle(0, -20, 55, 8, 0xe64a19);
+    const potHighlight = this.scene.add.rectangle(-15, -10, 5, 15, 0xff7043, 0.4);
+    
+    // Soil
+    const soil = this.scene.add.ellipse(0, -22, 45, 10, 0x3e2723);
+    
+    // Leaves
+    for (let i = 0; i < 7; i++) {
+      const angle = (i / 7) * Math.PI * 2 - Math.PI / 2;
+      const leafLength = 35 + Math.random() * 20;
+      const leafX = Math.cos(angle) * 15;
+      const leafY = -40 + Math.sin(angle) * 10;
+      
+      const leaf = this.scene.add.ellipse(leafX, leafY - leafLength/2, 12, leafLength, 0x4caf50);
+      leaf.setAngle(Phaser.Math.RadToDeg(angle) + 90);
+      this.container.add(leaf);
+    }
+    
+    this.container.add([shadow, potBottom, potRim, potHighlight, soil]);
+    this.container.sendToBack(shadow);
+  }
+  
+  createFrame() {
+    // Shadow
+    const shadow = this.scene.add.rectangle(4, 4, 70, 90, 0x000000, 0.3);
+    
+    // Frame
+    const frameOuter = this.scene.add.rectangle(0, 0, 70, 90, 0x5d4037);
+    const frameInner = this.scene.add.rectangle(0, 0, 60, 80, 0x8d6e63);
+    const picture = this.scene.add.rectangle(0, 0, 52, 72, 0x81d4fa);
+    
+    // Simple landscape in frame
+    const sky = this.scene.add.rectangle(0, -18, 50, 35, 0x4fc3f7);
+    const grass = this.scene.add.rectangle(0, 15, 50, 30, 0x66bb6a);
+    const sun = this.scene.add.circle(15, -25, 8, 0xffeb3b);
+    const mountain = this.scene.add.triangle(0, 5, -20, 20, 20, 20, 0, -15, 0x78909c);
+    
+    this.container.add([shadow, frameOuter, frameInner, picture, sky, grass, mountain, sun]);
+  }
+  
+  createWineGlass() {
+    // Shadow
+    const shadow = this.scene.add.ellipse(0, 3, 25, 8, 0x000000, 0.2);
+    
+    // Base
+    const base = this.scene.add.ellipse(0, 0, 25, 8, 0xb0bec5);
+    
+    // Stem
+    const stem = this.scene.add.rectangle(0, -20, 4, 35, 0xcfd8dc);
+    
+    // Bowl
+    const bowlOuter = this.scene.add.ellipse(0, -45, 28, 35, 0xe0e0e0, 0.7);
+    const bowlInner = this.scene.add.ellipse(0, -43, 22, 28, 0xffffff, 0.3);
+    
+    // Wine
+    const wine = this.scene.add.ellipse(0, -40, 18, 20, 0xb71c1c, 0.8);
+    
+    // Highlight
+    const highlight = this.scene.add.ellipse(-8, -48, 4, 10, 0xffffff, 0.5);
+    
+    this.container.add([shadow, base, stem, bowlOuter, wine, bowlInner, highlight]);
+  }
+  
+  containsPoint(x, y) {
+    if (this.destroyed) return false;
+    
+    // Transform point to local coordinates
+    const localX = x - this.x;
+    const localY = y - this.y;
+    
+    if (this.hitArea instanceof Phaser.Geom.Circle) {
+      return Phaser.Geom.Circle.Contains(this.hitArea, localX, localY);
+    } else if (this.hitArea instanceof Phaser.Geom.Rectangle) {
+      return Phaser.Geom.Rectangle.Contains(this.hitArea, localX, localY);
+    }
+    return false;
+  }
+  
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    
+    // Shatter animation
+    const pieces = [];
+    for (let i = 0; i < 8; i++) {
+      const piece = this.scene.add.circle(
+        this.x + (Math.random() - 0.5) * 30,
+        this.y - 30,
+        5 + Math.random() * 8,
+        this.type === 'wineglass' ? 0xe0e0e0 : 
+        this.type === 'vase' ? 0x2196f3 : 
+        this.type === 'lamp' ? 0xfff8e1 : 0x5d4037
+      );
+      pieces.push(piece);
+      
+      this.scene.tweens.add({
+        targets: piece,
+        x: piece.x + (Math.random() - 0.5) * 100,
+        y: piece.y + 50 + Math.random() * 50,
+        alpha: 0,
+        scale: 0.3,
+        angle: Math.random() * 360,
+        duration: 500,
+        ease: 'Power2',
+        onComplete: () => piece.destroy()
+      });
+    }
+    
+    // Hide original
+    this.scene.tweens.add({
+      targets: this.container,
+      alpha: 0,
+      duration: 100
+    });
+  }
+}
+
+// ============================================
+// IMPROVED FLY CLASS
 // ============================================
 class Fly {
   constructor(scene, x, y, speed) {
@@ -74,23 +286,11 @@ class Fly {
     this.alive = true;
     this.maxSpeed = speed || 2.5;
     
-    // Create fly graphics
     this.container = scene.add.container(x, y);
+    this.container.setDepth(50);
     
-    // Body
-    this.body = scene.add.ellipse(0, 0, 20, 14, 0x222222);
-    
-    // Wings
-    this.leftWing = scene.add.ellipse(-8, -2, 14, 8, 0x88888888);
-    this.rightWing = scene.add.ellipse(8, -2, 14, 8, 0x88888888);
-    this.leftWing.setAngle(-20);
-    this.rightWing.setAngle(20);
-    
-    // Eyes (flies have near 360° vision)
-    this.leftEye = scene.add.circle(-4, -4, 4, 0xcc0000);
-    this.rightEye = scene.add.circle(4, -4, 4, 0xcc0000);
-    
-    this.container.add([this.leftWing, this.rightWing, this.body, this.leftEye, this.rightEye]);
+    // Create detailed fly
+    this.createDetailedFly();
     
     // Movement properties
     this.velocity = { x: 0, y: 0 };
@@ -98,23 +298,92 @@ class Fly {
     this.acceleration = 0.1;
     
     // Behavior state
-    this.state = 'flying'; // flying, resting, fleeing, alert
+    this.state = 'flying';
     this.stateTimer = 0;
     this.restChance = 0.003;
     this.restDuration = 800 + Math.random() * 1500;
     this.directionChangeTimer = 0;
     this.directionChangeInterval = 500 + Math.random() * 1000;
     
-    // Threat detection (flies react to fast movement)
+    // Threat detection
     this.alertDistance = 150;
-    this.reactionTime = 100 + Math.random() * 100; // 100-200ms
+    this.reactionTime = 100 + Math.random() * 100;
     this.pendingThreat = null;
     this.threatTimer = 0;
     
-    // Wing animation
+    // Animation
     this.wingTime = 0;
     
     this.pickNewDirection();
+  }
+  
+  createDetailedFly() {
+    // Shadow on ground (updates with position)
+    this.shadow = this.scene.add.ellipse(0, 100, 15, 6, 0x000000, 0.15);
+    this.container.add(this.shadow);
+    
+    // Legs (thin lines)
+    const legColor = 0x1a1a1a;
+    this.legs = [];
+    for (let i = 0; i < 6; i++) {
+      const side = i < 3 ? -1 : 1;
+      const pos = (i % 3) - 1;
+      const leg = this.scene.add.rectangle(side * 8, pos * 4, 10, 1.5, legColor);
+      leg.setAngle(side * (20 + pos * 10));
+      this.legs.push(leg);
+      this.container.add(leg);
+    }
+    
+    // Abdomen (back part)
+    const abdomen = this.scene.add.ellipse(8, 0, 18, 12, 0x2d2d2d);
+    this.container.add(abdomen);
+    
+    // Thorax (middle)
+    const thorax = this.scene.add.ellipse(0, 0, 14, 11, 0x1a1a1a);
+    this.container.add(thorax);
+    
+    // Thorax stripes
+    const stripe1 = this.scene.add.rectangle(0, -2, 10, 1.5, 0x3d3d3d);
+    const stripe2 = this.scene.add.rectangle(0, 2, 10, 1.5, 0x3d3d3d);
+    this.container.add([stripe1, stripe2]);
+    
+    // Wings (translucent, iridescent)
+    this.leftWing = this.scene.add.ellipse(-3, -3, 20, 9, 0xaaaaaa, 0.4);
+    this.rightWing = this.scene.add.ellipse(-3, 3, 20, 9, 0xaaaaaa, 0.4);
+    this.leftWing.setAngle(-25);
+    this.rightWing.setAngle(25);
+    
+    // Wing veins (subtle detail)
+    this.leftWingVein = this.scene.add.ellipse(-3, -3, 18, 7, 0x888888, 0.2);
+    this.rightWingVein = this.scene.add.ellipse(-3, 3, 18, 7, 0x888888, 0.2);
+    this.leftWingVein.setAngle(-25);
+    this.rightWingVein.setAngle(25);
+    
+    this.container.add([this.leftWing, this.rightWing, this.leftWingVein, this.rightWingVein]);
+    
+    // Head
+    const head = this.scene.add.ellipse(-9, 0, 9, 8, 0x1a1a1a);
+    this.container.add(head);
+    
+    // Compound eyes (large, reddish-brown)
+    this.leftEye = this.scene.add.ellipse(-11, -3, 6, 5, 0x8b0000);
+    this.rightEye = this.scene.add.ellipse(-11, 3, 6, 5, 0x8b0000);
+    
+    // Eye highlights
+    const leftEyeHighlight = this.scene.add.ellipse(-12, -4, 2, 2, 0xcc4444, 0.6);
+    const rightEyeHighlight = this.scene.add.ellipse(-12, 2, 2, 2, 0xcc4444, 0.6);
+    
+    this.container.add([this.leftEye, this.rightEye, leftEyeHighlight, rightEyeHighlight]);
+    
+    // Antennae
+    const leftAntenna = this.scene.add.rectangle(-14, -4, 8, 1, 0x1a1a1a);
+    const rightAntenna = this.scene.add.rectangle(-14, 4, 8, 1, 0x1a1a1a);
+    leftAntenna.setAngle(-30);
+    rightAntenna.setAngle(30);
+    this.container.add([leftAntenna, rightAntenna]);
+    
+    // Scale down slightly
+    this.container.setScale(1.2);
   }
   
   get x() { return this.container.x; }
@@ -131,13 +400,11 @@ class Fly {
     this.directionChangeTimer = 0;
   }
   
-  // Called when something fast moves near the fly
   detectThreat(x, y, speed) {
     if (this.state === 'fleeing') return;
     
     const dist = Phaser.Math.Distance.Between(this.x, this.y, x, y);
     
-    // Only react to fast-moving threats within alert distance
     if (dist < this.alertDistance && speed > 5) {
       this.pendingThreat = { x, y };
       this.threatTimer = this.reactionTime;
@@ -146,16 +413,13 @@ class Fly {
   }
   
   fleeFrom(x, y) {
-    // Fly away from the threat (opposite direction)
     const dx = this.container.x - x;
     const dy = this.container.y - y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     
     if (dist > 0) {
-      // Flee at maximum speed
       this.targetVelocity.x = (dx / dist) * this.maxSpeed * 2;
       this.targetVelocity.y = (dy / dist) * this.maxSpeed * 2;
-      // Immediate velocity boost
       this.velocity.x = this.targetVelocity.x * 0.5;
       this.velocity.y = this.targetVelocity.y * 0.5;
     }
@@ -168,18 +432,25 @@ class Fly {
   update(delta) {
     if (!this.alive) return;
     
-    // Wing animation (faster when fleeing)
-    const wingSpeed = this.state === 'fleeing' ? 0.08 : 0.05;
+    // Wing animation
+    const wingSpeed = this.state === 'fleeing' ? 0.1 : this.state === 'resting' ? 0 : 0.06;
     this.wingTime += delta * wingSpeed;
-    const wingFlap = Math.sin(this.wingTime) * 15;
-    this.leftWing.setAngle(-20 + wingFlap);
-    this.rightWing.setAngle(20 - wingFlap);
+    const wingFlap = Math.sin(this.wingTime) * 20;
+    
+    if (this.state === 'resting') {
+      this.leftWing.setAngle(-15);
+      this.rightWing.setAngle(15);
+    } else {
+      this.leftWing.setAngle(-25 + wingFlap);
+      this.rightWing.setAngle(25 - wingFlap);
+      this.leftWingVein.setAngle(-25 + wingFlap);
+      this.rightWingVein.setAngle(25 - wingFlap);
+    }
     
     // State management
     this.stateTimer -= delta;
     this.directionChangeTimer += delta;
     
-    // Process pending threat reaction
     if (this.state === 'alert') {
       this.threatTimer -= delta;
       if (this.threatTimer <= 0 && this.pendingThreat) {
@@ -189,9 +460,6 @@ class Fly {
     }
     
     if (this.state === 'resting') {
-      this.leftWing.setAngle(-10);
-      this.rightWing.setAngle(10);
-      
       if (this.stateTimer <= 0) {
         this.state = 'flying';
         this.pickNewDirection();
@@ -204,7 +472,6 @@ class Fly {
       this.pickNewDirection();
     }
     
-    // Random rest (flies land occasionally)
     if (this.state === 'flying' && Math.random() < this.restChance) {
       this.state = 'resting';
       this.stateTimer = this.restDuration;
@@ -213,58 +480,61 @@ class Fly {
       return;
     }
     
-    // Direction changes
     if (this.state === 'flying' && this.directionChangeTimer >= this.directionChangeInterval) {
       this.pickNewDirection();
     }
     
-    // Smooth acceleration toward target velocity
     const accel = this.state === 'fleeing' ? 0.2 : 0.1;
     this.velocity.x += (this.targetVelocity.x - this.velocity.x) * accel;
     this.velocity.y += (this.targetVelocity.y - this.velocity.y) * accel;
     
-    // Apply velocity
     this.container.x += this.velocity.x;
     this.container.y += this.velocity.y;
     
-    // Bounce off walls
+    // Boundaries
     const margin = 30;
+    const topMargin = 100;
+    const bottomMargin = 250;
+    
     if (this.container.x < margin) {
       this.container.x = margin;
-      this.targetVelocity.x = Math.abs(this.targetVelocity.x) * (0.8 + Math.random() * 0.4);
+      this.targetVelocity.x = Math.abs(this.targetVelocity.x);
     }
     if (this.container.x > CONFIG.width - margin) {
       this.container.x = CONFIG.width - margin;
-      this.targetVelocity.x = -Math.abs(this.targetVelocity.x) * (0.8 + Math.random() * 0.4);
+      this.targetVelocity.x = -Math.abs(this.targetVelocity.x);
     }
-    if (this.container.y < margin + 80) {
-      this.container.y = margin + 80;
-      this.targetVelocity.y = Math.abs(this.targetVelocity.y) * (0.8 + Math.random() * 0.4);
+    if (this.container.y < topMargin) {
+      this.container.y = topMargin;
+      this.targetVelocity.y = Math.abs(this.targetVelocity.y);
     }
-    if (this.container.y > CONFIG.height - margin - 200) {
-      this.container.y = CONFIG.height - margin - 200;
-      this.targetVelocity.y = -Math.abs(this.targetVelocity.y) * (0.8 + Math.random() * 0.4);
+    if (this.container.y > CONFIG.height - bottomMargin) {
+      this.container.y = CONFIG.height - bottomMargin;
+      this.targetVelocity.y = -Math.abs(this.targetVelocity.y);
     }
     
-    // Face direction of movement
+    // Face direction
     if (Math.abs(this.velocity.x) > 0.1) {
-      this.container.scaleX = this.velocity.x > 0 ? 1 : -1;
+      this.container.scaleX = this.velocity.x > 0 ? -1.2 : 1.2;
     }
+    
+    // Update shadow position relative to fly height
+    this.shadow.y = 100;
+    this.shadow.alpha = 0.15;
   }
   
   kill() {
     this.alive = false;
     
+    // Squash animation
     this.scene.tweens.add({
       targets: this.container,
-      scaleX: 1.5,
-      scaleY: 0.3,
+      scaleX: 2,
+      scaleY: 0.2,
       alpha: 0,
-      duration: 200,
+      duration: 150,
       ease: 'Power2',
-      onComplete: () => {
-        this.container.destroy();
-      }
+      onComplete: () => this.container.destroy()
     });
   }
 }
@@ -278,35 +548,23 @@ class RubberBandProjectile {
     this.active = true;
     this.speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
     
-    // Create projectile graphic (rubber band ball)
     this.sprite = scene.add.circle(x, y, 8, 0x8B4513);
     this.sprite.setStrokeStyle(2, 0x5D3A1A);
+    this.sprite.setDepth(60);
     
     this.velocity = { x: velocityX, y: velocityY };
-    this.gravity = 0.15; // Gravity effect
-    
-    // Trail effect
-    this.trail = [];
+    this.gravity = 0.15;
   }
   
   update(delta) {
     if (!this.active) return;
     
-    // Store trail position
-    this.trail.push({ x: this.sprite.x, y: this.sprite.y, alpha: 0.5 });
-    if (this.trail.length > 5) {
-      this.trail.shift();
-    }
-    
-    // Apply gravity (more effect on slow shots)
     const gravityFactor = Math.max(0.5, 1 - (this.speed / 30));
     this.velocity.y += this.gravity * gravityFactor;
     
-    // Apply velocity
     this.sprite.x += this.velocity.x;
     this.sprite.y += this.velocity.y;
     
-    // Check bounds
     if (this.sprite.x < 0 || this.sprite.x > CONFIG.width ||
         this.sprite.y < 0 || this.sprite.y > CONFIG.height) {
       this.destroy();
@@ -343,16 +601,16 @@ class GameScene extends Phaser.Scene {
   }
   
   create() {
-    // Background
-    this.add.rectangle(CONFIG.width/2, CONFIG.height/2, CONFIG.width, CONFIG.height, 0xf5f5dc);
-    this.add.rectangle(CONFIG.width/2, CONFIG.height - 30, CONFIG.width, 60, 0x8b7355);
-    this.add.rectangle(CONFIG.width/2, 30, CONFIG.width, 60, 0xe8e0d0);
+    // Initialize arrays first
+    this.flies = [];
+    this.furniture = [];
     
-    // Window (decorative)
-    this.add.rectangle(CONFIG.width/2, 200, 120, 150, 0x87ceeb);
-    this.add.rectangle(CONFIG.width/2, 200, 110, 140, 0xadd8e6);
-    this.add.rectangle(CONFIG.width/2, 200, 4, 150, 0x8b7355);
-    this.add.rectangle(CONFIG.width/2, 200, 120, 4, 0x8b7355);
+    // Create environment based on level
+    if (this.levelConfig.tool === 'swatter') {
+      this.createLivingRoom();
+    } else {
+      this.createSimpleBackground();
+    }
     
     // Game state
     this.score = 0;
@@ -360,7 +618,6 @@ class GameScene extends Phaser.Scene {
     this.comboTimer = 0;
     this.catches = 0;
     this.misses = 0;
-    this.flies = [];
     this.gameActive = true;
     this.timeRemaining = this.levelConfig.timeLimit;
     
@@ -369,8 +626,6 @@ class GameScene extends Phaser.Scene {
     this.isDragging = false;
     this.dragStart = { x: 0, y: 0 };
     this.anchorPoint = { x: CONFIG.width / 2, y: CONFIG.height - 180 };
-    this.aimLine = null;
-    this.powerIndicator = null;
     
     // UI Setup
     this.createUI();
@@ -394,44 +649,300 @@ class GameScene extends Phaser.Scene {
     });
   }
   
+  createLivingRoom() {
+    const g = this.add.graphics();
+    
+    // Wall background
+    g.fillStyle(0xf5e6d3);
+    g.fillRect(0, 0, CONFIG.width, CONFIG.height);
+    
+    // Wainscoting (lower wall panel)
+    g.fillStyle(0xdec9b8);
+    g.fillRect(0, CONFIG.height - 200, CONFIG.width, 200);
+    
+    // Wainscoting trim
+    g.fillStyle(0xc9b8a8);
+    g.fillRect(0, CONFIG.height - 200, CONFIG.width, 8);
+    
+    // Chair rail molding
+    g.fillStyle(0xf0e0d0);
+    g.fillRect(0, CONFIG.height - 205, CONFIG.width, 12);
+    
+    // Baseboard
+    g.fillStyle(0xd4c4b0);
+    g.fillRect(0, CONFIG.height - 25, CONFIG.width, 25);
+    g.fillStyle(0xc4b4a0);
+    g.fillRect(0, CONFIG.height - 28, CONFIG.width, 5);
+    
+    // Floor
+    g.fillStyle(0x8b7355);
+    g.fillRect(0, CONFIG.height - 22, CONFIG.width, 22);
+    
+    // Floor wood grain lines
+    g.lineStyle(1, 0x7a6348, 0.3);
+    for (let i = 0; i < 8; i++) {
+      const y = CONFIG.height - 20 + i * 3;
+      g.lineBetween(0, y, CONFIG.width, y);
+    }
+    
+    // Crown molding at top
+    g.fillStyle(0xf8f0e8);
+    g.fillRect(0, 0, CONFIG.width, 15);
+    g.fillStyle(0xe8e0d8);
+    g.fillRect(0, 15, CONFIG.width, 5);
+    
+    // Window
+    this.createWindow(CONFIG.width / 2, 220);
+    
+    // Side table on left
+    this.createSideTable(70, CONFIG.height - 200);
+    
+    // Bookshelf suggestion on right wall
+    this.createBookshelf(CONFIG.width - 50, 320);
+    
+    // Couch in lower area
+    this.createCouch(CONFIG.width / 2, CONFIG.height - 120);
+    
+    // Coffee table
+    this.createCoffeeTable(CONFIG.width / 2, CONFIG.height - 200);
+    
+    // Add destructible furniture
+    this.furniture.push(new Furniture(this, 70, CONFIG.height - 245, 'vase'));
+    this.furniture.push(new Furniture(this, CONFIG.width - 60, CONFIG.height - 245, 'lamp'));
+    this.furniture.push(new Furniture(this, CONFIG.width / 2 - 60, CONFIG.height - 225, 'wineglass'));
+    this.furniture.push(new Furniture(this, 60, 280, 'frame'));
+  }
+  
+  createWindow(x, y) {
+    const g = this.add.graphics();
+    
+    // Window frame (outer)
+    g.fillStyle(0xf5f5f0);
+    g.fillRect(x - 75, y - 100, 150, 180);
+    
+    // Window shadow
+    g.fillStyle(0x000000, 0.1);
+    g.fillRect(x - 70, y - 95, 140, 170);
+    
+    // Sky
+    g.fillStyle(0x87ceeb);
+    g.fillRect(x - 65, y - 90, 130, 110);
+    
+    // Clouds
+    g.fillStyle(0xffffff, 0.8);
+    g.fillCircle(x - 30, y - 60, 15);
+    g.fillCircle(x - 15, y - 55, 20);
+    g.fillCircle(x + 5, y - 60, 12);
+    
+    g.fillCircle(x + 40, y - 40, 12);
+    g.fillCircle(x + 55, y - 35, 15);
+    
+    // Sun
+    g.fillStyle(0xfff59d);
+    g.fillCircle(x + 45, y - 70, 18);
+    g.fillStyle(0xffeb3b, 0.3);
+    g.fillCircle(x + 45, y - 70, 25);
+    
+    // Trees/greenery at bottom of window
+    g.fillStyle(0x4caf50);
+    g.fillRect(x - 65, y + 20, 130, 40);
+    g.fillStyle(0x388e3c);
+    g.fillCircle(x - 40, y + 15, 20);
+    g.fillCircle(x, y + 10, 25);
+    g.fillCircle(x + 40, y + 18, 18);
+    
+    // Window panes (cross)
+    g.fillStyle(0xf5f5f0);
+    g.fillRect(x - 3, y - 90, 6, 160);
+    g.fillRect(x - 65, y - 10, 130, 6);
+    
+    // Window sill
+    g.fillStyle(0xe8e0d8);
+    g.fillRect(x - 80, y + 75, 160, 15);
+    g.fillStyle(0xd8d0c8);
+    g.fillRect(x - 80, y + 88, 160, 5);
+    
+    // Curtains
+    g.fillStyle(0xd4a574, 0.9);
+    g.fillRect(x - 90, y - 110, 25, 210);
+    g.fillRect(x + 65, y - 110, 25, 210);
+    
+    // Curtain folds
+    g.lineStyle(2, 0xc49464, 0.5);
+    g.lineBetween(x - 82, y - 110, x - 82, y + 100);
+    g.lineBetween(x - 75, y - 110, x - 75, y + 100);
+    g.lineBetween(x + 73, y - 110, x + 73, y + 100);
+    g.lineBetween(x + 80, y - 110, x + 80, y + 100);
+    
+    // Curtain rod
+    g.fillStyle(0x8b7355);
+    g.fillRect(x - 95, y - 115, 190, 8);
+    g.fillCircle(x - 95, y - 111, 6);
+    g.fillCircle(x + 95, y - 111, 6);
+  }
+  
+  createSideTable(x, y) {
+    const g = this.add.graphics();
+    
+    // Table top
+    g.fillStyle(0x5d4037);
+    g.fillRect(x - 35, y, 70, 8);
+    
+    // Table top edge highlight
+    g.fillStyle(0x6d4c41);
+    g.fillRect(x - 35, y, 70, 3);
+    
+    // Legs
+    g.fillStyle(0x4e342e);
+    g.fillRect(x - 30, y + 8, 8, 45);
+    g.fillRect(x + 22, y + 8, 8, 45);
+    
+    // Shelf
+    g.fillStyle(0x5d4037);
+    g.fillRect(x - 28, y + 35, 56, 5);
+  }
+  
+  createBookshelf(x, y) {
+    const g = this.add.graphics();
+    
+    // Back
+    g.fillStyle(0x5d4037);
+    g.fillRect(x - 35, y - 80, 70, 160);
+    
+    // Shelves
+    g.fillStyle(0x6d4c41);
+    for (let i = 0; i < 4; i++) {
+      g.fillRect(x - 38, y - 80 + i * 45, 76, 8);
+    }
+    
+    // Books (colorful)
+    const bookColors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c];
+    for (let shelf = 0; shelf < 3; shelf++) {
+      let bookX = x - 30;
+      for (let i = 0; i < 5; i++) {
+        const bookWidth = 8 + Math.random() * 6;
+        const bookHeight = 30 + Math.random() * 10;
+        g.fillStyle(bookColors[(shelf * 5 + i) % bookColors.length]);
+        g.fillRect(bookX, y - 72 + shelf * 45 + (40 - bookHeight), bookWidth, bookHeight);
+        bookX += bookWidth + 2;
+      }
+    }
+  }
+  
+  createCouch(x, y) {
+    const g = this.add.graphics();
+    
+    // Couch shadow
+    g.fillStyle(0x000000, 0.15);
+    g.fillEllipse(x, y + 35, 180, 20);
+    
+    // Couch base/front
+    g.fillStyle(0x5d8aa8);
+    g.fillRoundedRect(x - 90, y - 20, 180, 50, 8);
+    
+    // Couch seat
+    g.fillStyle(0x6b9ab8);
+    g.fillRoundedRect(x - 85, y - 35, 170, 25, 5);
+    
+    // Couch back
+    g.fillStyle(0x4a7a8a);
+    g.fillRoundedRect(x - 85, y - 60, 170, 30, 8);
+    
+    // Cushion lines
+    g.lineStyle(2, 0x4a7a8a, 0.5);
+    g.lineBetween(x - 30, y - 35, x - 30, y + 25);
+    g.lineBetween(x + 30, y - 35, x + 30, y + 25);
+    
+    // Armrests
+    g.fillStyle(0x4a7a8a);
+    g.fillRoundedRect(x - 95, y - 50, 20, 65, 5);
+    g.fillRoundedRect(x + 75, y - 50, 20, 65, 5);
+    
+    // Pillows
+    g.fillStyle(0xd4a574);
+    g.fillEllipse(x - 55, y - 45, 30, 25);
+    g.fillStyle(0xc49464);
+    g.fillEllipse(x + 55, y - 45, 30, 25);
+  }
+  
+  createCoffeeTable(x, y) {
+    const g = this.add.graphics();
+    
+    // Shadow
+    g.fillStyle(0x000000, 0.1);
+    g.fillEllipse(x, y + 22, 100, 15);
+    
+    // Table top
+    g.fillStyle(0x6d4c41);
+    g.fillRoundedRect(x - 55, y - 5, 110, 12, 3);
+    
+    // Glass/surface highlight
+    g.fillStyle(0xffffff, 0.1);
+    g.fillRoundedRect(x - 50, y - 3, 100, 6, 2);
+    
+    // Legs
+    g.fillStyle(0x5d4037);
+    g.fillRect(x - 45, y + 7, 8, 18);
+    g.fillRect(x + 37, y + 7, 8, 18);
+  }
+  
+  createSimpleBackground() {
+    // Simple background for rubber band level
+    const g = this.add.graphics();
+    
+    g.fillStyle(0xf5e6d3);
+    g.fillRect(0, 0, CONFIG.width, CONFIG.height);
+    
+    // Floor
+    g.fillStyle(0x8b7355);
+    g.fillRect(0, CONFIG.height - 100, CONFIG.width, 100);
+    
+    // Window
+    this.createWindow(CONFIG.width / 2, 220);
+  }
+  
   createUI() {
+    // Semi-transparent UI bar
+    const uiBg = this.add.rectangle(CONFIG.width/2, 50, CONFIG.width, 90, 0x000000, 0.3);
+    uiBg.setDepth(100);
+    
     // Level name
-    this.add.text(CONFIG.width/2, 15, `Level ${this.currentLevel}: ${this.levelConfig.name}`, {
+    this.add.text(CONFIG.width/2, 18, `Level ${this.currentLevel}: ${this.levelConfig.name}`, {
+      fontSize: '14px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0).setDepth(101);
+    
+    // Timer (large, centered)
+    this.timerText = this.add.text(CONFIG.width/2, 45, this.formatTime(this.timeRemaining), {
+      fontSize: '36px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0).setDepth(101);
+    
+    // Progress
+    this.progressText = this.add.text(20, 75, `🪰 ${this.catches}/${this.levelConfig.targetCatches}`, {
       fontSize: '16px',
       fontFamily: 'Arial, sans-serif',
-      color: '#666',
-      fontStyle: 'bold'
-    }).setOrigin(0.5, 0);
-    
-    // Timer
-    this.timerText = this.add.text(CONFIG.width/2, 45, this.formatTime(this.timeRemaining), {
-      fontSize: '32px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#333',
-      fontStyle: 'bold'
-    }).setOrigin(0.5, 0);
-    
-    // Progress (catches)
-    this.progressText = this.add.text(20, 85, `Catches: 0/${this.levelConfig.targetCatches}`, {
-      fontSize: '18px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#333'
-    });
+      color: '#ffffff'
+    }).setDepth(101);
     
     // Score
-    this.scoreText = this.add.text(CONFIG.width - 20, 85, 'Score: 0', {
-      fontSize: '18px',
+    this.scoreText = this.add.text(CONFIG.width - 20, 75, `⭐ ${this.score}`, {
+      fontSize: '16px',
       fontFamily: 'Arial, sans-serif',
-      color: '#333'
-    }).setOrigin(1, 0);
+      color: '#ffffff'
+    }).setOrigin(1, 0).setDepth(101);
     
     // Combo
-    this.comboText = this.add.text(CONFIG.width/2, 120, '', {
-      fontSize: '24px',
+    this.comboText = this.add.text(CONFIG.width/2, 95, '', {
+      fontSize: '20px',
       fontFamily: 'Arial, sans-serif',
-      color: '#e74c3c',
+      color: '#ffeb3b',
       fontStyle: 'bold'
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0.5, 0).setDepth(101);
   }
   
   formatTime(seconds) {
@@ -446,12 +957,11 @@ class GameScene extends Phaser.Scene {
     this.timeRemaining--;
     this.timerText.setText(this.formatTime(this.timeRemaining));
     
-    // Flash red when low
     if (this.timeRemaining <= 5) {
-      this.timerText.setColor('#e74c3c');
+      this.timerText.setColor('#ff6b6b');
       this.tweens.add({
         targets: this.timerText,
-        scale: 1.2,
+        scale: 1.15,
         duration: 100,
         yoyo: true
       });
@@ -468,7 +978,7 @@ class GameScene extends Phaser.Scene {
   setupSwatter() {
     this.swatter = this.createSwatter();
     this.swatter.setVisible(false);
-    this.swatter.setDepth(100);
+    this.swatter.setDepth(200);
     
     this.input.on('pointermove', this.handleSwatterMove, this);
     this.input.on('pointerdown', this.handleSwatterTap, this);
@@ -477,27 +987,38 @@ class GameScene extends Phaser.Scene {
   createSwatter() {
     const swatter = this.add.container(0, 0);
     
-    const handle = this.add.rectangle(0, 70, 12, 100, 0x8B4513);
-    handle.setStrokeStyle(2, 0x5D3A1A);
+    // Handle with wood grain
+    const handle = this.add.rectangle(0, 75, 14, 110, 0x8B4513);
+    handle.setStrokeStyle(1, 0x5D3A1A);
     
-    const head = this.add.ellipse(0, 0, 80, 90, 0x222222);
-    head.setStrokeStyle(3, 0x111111);
+    // Handle grip lines
+    const grip1 = this.add.rectangle(0, 60, 12, 2, 0x6d4c41);
+    const grip2 = this.add.rectangle(0, 70, 12, 2, 0x6d4c41);
+    const grip3 = this.add.rectangle(0, 80, 12, 2, 0x6d4c41);
     
+    // Swatter head frame
+    const headFrame = this.add.ellipse(0, 0, 85, 95, 0x333333);
+    headFrame.setStrokeStyle(3, 0x222222);
+    
+    // Mesh area
+    const mesh = this.add.ellipse(0, 0, 75, 85, 0x444444);
+    
+    // Mesh grid
     const meshGraphics = this.add.graphics();
-    meshGraphics.lineStyle(1, 0x444444, 0.8);
+    meshGraphics.lineStyle(1, 0x555555, 0.9);
     
-    for (let y = -35; y <= 35; y += 10) {
-      const width = Math.sqrt(1 - (y/45)**2) * 38;
+    for (let y = -35; y <= 35; y += 8) {
+      const width = Math.sqrt(1 - (y/42)**2) * 35;
       meshGraphics.lineBetween(-width, y, width, y);
     }
     
-    for (let x = -35; x <= 35; x += 10) {
-      const height = Math.sqrt(1 - (x/40)**2) * 42;
+    for (let x = -30; x <= 30; x += 8) {
+      const height = Math.sqrt(1 - (x/38)**2) * 40;
       meshGraphics.lineBetween(x, -height, x, height);
     }
     
-    swatter.add([handle, head, meshGraphics]);
-    swatter.setScale(0.7);
+    swatter.add([handle, grip1, grip2, grip3, headFrame, mesh, meshGraphics]);
+    swatter.setScale(0.65);
     
     return swatter;
   }
@@ -505,7 +1026,7 @@ class GameScene extends Phaser.Scene {
   handleSwatterMove(pointer) {
     this.swatter.setPosition(pointer.x, pointer.y);
     this.swatter.setVisible(true);
-    this.swatter.setAngle(-15);
+    this.swatter.setAngle(-20);
   }
   
   handleSwatterTap(pointer) {
@@ -518,29 +1039,41 @@ class GameScene extends Phaser.Scene {
     this.swatter.setPosition(tapX, tapY);
     this.tweens.add({
       targets: this.swatter,
-      angle: 15,
-      duration: 50,
+      angle: 20,
+      duration: 60,
       yoyo: true,
       ease: 'Power2'
     });
     
-    // Check for hits
-    let hitAny = false;
+    // Check furniture hits first
+    let hitFurniture = false;
+    this.furniture.forEach(item => {
+      if (item.containsPoint(tapX, tapY)) {
+        hitFurniture = true;
+        item.destroy();
+        this.score = Math.max(0, this.score - item.pointPenalty);
+        this.scoreText.setText(`⭐ ${this.score}`);
+        this.showPenaltyPopup(item.x, item.y - 50, -item.pointPenalty);
+        this.cameras.main.shake(150, 0.015);
+      }
+    });
     
+    // Check fly hits
+    let hitFly = false;
     this.flies.forEach(fly => {
       if (!fly.alive) return;
       
       const distance = Phaser.Math.Distance.Between(tapX, tapY, fly.x, fly.y);
       
       if (distance < this.levelConfig.hitRadius) {
-        hitAny = true;
+        hitFly = true;
         this.catchFly(fly, tapX, tapY, 1);
       } else if (distance < this.levelConfig.hitRadius * 2) {
         fly.fleeFrom(tapX, tapY);
       }
     });
     
-    if (!hitAny) {
+    if (!hitFly && !hitFurniture) {
       this.handleMiss();
     }
   }
@@ -549,37 +1082,33 @@ class GameScene extends Phaser.Scene {
   // RUBBER BAND TOOL
   // ============================================
   setupRubberBand() {
-    // Anchor point visual
     this.anchorVisual = this.add.container(this.anchorPoint.x, this.anchorPoint.y);
     
-    // Slingshot frame
-    const leftPost = this.add.rectangle(-25, -20, 8, 50, 0x8B4513);
-    const rightPost = this.add.rectangle(25, -20, 8, 50, 0x8B4513);
-    const base = this.add.rectangle(0, 10, 60, 12, 0x5D3A1A);
+    const leftPost = this.add.rectangle(-25, -20, 10, 55, 0x8B4513);
+    leftPost.setStrokeStyle(1, 0x5D3A1A);
+    const rightPost = this.add.rectangle(25, -20, 10, 55, 0x8B4513);
+    rightPost.setStrokeStyle(1, 0x5D3A1A);
+    const base = this.add.rectangle(0, 15, 70, 15, 0x5D3A1A);
+    base.setStrokeStyle(1, 0x4E342E);
     
     this.anchorVisual.add([base, leftPost, rightPost]);
     
-    // Rubber band graphics (will be drawn dynamically)
     this.bandGraphics = this.add.graphics();
     this.bandGraphics.setDepth(50);
     
-    // Power meter background
     this.powerMeterBg = this.add.rectangle(CONFIG.width - 30, CONFIG.height/2, 20, 200, 0x333333, 0.3);
     this.powerMeterFill = this.add.rectangle(CONFIG.width - 30, CONFIG.height/2 + 100, 16, 0, 0xe74c3c);
     this.powerMeterFill.setOrigin(0.5, 1);
     
-    // Trajectory preview
     this.trajectoryGraphics = this.add.graphics();
     this.trajectoryGraphics.setDepth(40);
     
-    // Instructions
     this.instructionText = this.add.text(CONFIG.width/2, CONFIG.height - 120, 'Touch below & pull back to aim!', {
       fontSize: '14px',
       fontFamily: 'Arial, sans-serif',
       color: '#666'
     }).setOrigin(0.5);
     
-    // Input handlers
     this.input.on('pointerdown', this.handleRubberBandStart, this);
     this.input.on('pointermove', this.handleRubberBandDrag, this);
     this.input.on('pointerup', this.handleRubberBandRelease, this);
@@ -588,7 +1117,6 @@ class GameScene extends Phaser.Scene {
   handleRubberBandStart(pointer) {
     if (!this.gameActive || this.projectile) return;
     
-    // Larger touch area for mobile - anywhere in bottom third of screen
     if (pointer.y > CONFIG.height - 300) {
       this.isDragging = true;
       this.dragStart = { x: pointer.x, y: pointer.y };
@@ -598,53 +1126,45 @@ class GameScene extends Phaser.Scene {
   handleRubberBandDrag(pointer) {
     if (!this.isDragging || !this.gameActive) return;
     
-    // Calculate pull vector (from pointer back to anchor)
     const pullX = this.anchorPoint.x - pointer.x;
     const pullY = this.anchorPoint.y - pointer.y;
     const pullDistance = Math.min(Math.sqrt(pullX * pullX + pullY * pullY), 150);
     const pullAngle = Math.atan2(pullY, pullX);
     
-    // Constrain pull point
     const constrainedX = this.anchorPoint.x - Math.cos(pullAngle) * pullDistance;
     const constrainedY = this.anchorPoint.y - Math.sin(pullAngle) * pullDistance;
     
-    // Draw rubber band
     this.bandGraphics.clear();
-    this.bandGraphics.lineStyle(4, 0x8B4513);
+    this.bandGraphics.lineStyle(5, 0x8B4513);
     
-    // Left band
     this.bandGraphics.lineBetween(
-      this.anchorPoint.x - 25, this.anchorPoint.y - 40,
+      this.anchorPoint.x - 25, this.anchorPoint.y - 45,
       constrainedX, constrainedY
     );
     
-    // Right band
     this.bandGraphics.lineBetween(
-      this.anchorPoint.x + 25, this.anchorPoint.y - 40,
+      this.anchorPoint.x + 25, this.anchorPoint.y - 45,
       constrainedX, constrainedY
     );
     
-    // Projectile preview at pull point
     this.bandGraphics.fillStyle(0x8B4513);
-    this.bandGraphics.fillCircle(constrainedX, constrainedY, 10);
+    this.bandGraphics.fillCircle(constrainedX, constrainedY, 12);
+    this.bandGraphics.lineStyle(2, 0x5D3A1A);
+    this.bandGraphics.strokeCircle(constrainedX, constrainedY, 12);
     
-    // Update power meter
     const power = pullDistance / 150;
     this.powerMeterFill.setSize(16, power * 196);
     
-    // Color based on power
     if (power < 0.3) {
-      this.powerMeterFill.setFillStyle(0xf39c12); // Orange - weak
+      this.powerMeterFill.setFillStyle(0xf39c12);
     } else if (power < 0.7) {
-      this.powerMeterFill.setFillStyle(0x27ae60); // Green - good
+      this.powerMeterFill.setFillStyle(0x27ae60);
     } else {
-      this.powerMeterFill.setFillStyle(0xe74c3c); // Red - powerful
+      this.powerMeterFill.setFillStyle(0xe74c3c);
     }
     
-    // Draw trajectory preview
     this.drawTrajectory(constrainedX, constrainedY, pullDistance, pullAngle);
     
-    // Alert flies to the pulling motion (slow, so low threat)
     this.flies.forEach(fly => fly.detectThreat(constrainedX, constrainedY, 2));
   }
   
@@ -671,7 +1191,6 @@ class GameScene extends Phaser.Scene {
       points.push({ x, y });
     }
     
-    // Draw dotted line
     for (let i = 0; i < points.length - 1; i += 2) {
       if (points[i + 1]) {
         this.trajectoryGraphics.lineBetween(
@@ -687,13 +1206,11 @@ class GameScene extends Phaser.Scene {
     
     this.isDragging = false;
     
-    // Calculate launch velocity
     const pullX = this.anchorPoint.x - pointer.x;
     const pullY = this.anchorPoint.y - pointer.y;
     const pullDistance = Math.min(Math.sqrt(pullX * pullX + pullY * pullY), 150);
     
     if (pullDistance < 20) {
-      // Not enough pull, cancel
       this.bandGraphics.clear();
       this.trajectoryGraphics.clear();
       this.powerMeterFill.setSize(16, 0);
@@ -706,18 +1223,15 @@ class GameScene extends Phaser.Scene {
     const vx = Math.cos(pullAngle) * velocityMagnitude;
     const vy = Math.sin(pullAngle) * velocityMagnitude;
     
-    // Create projectile
     const startX = this.anchorPoint.x - Math.cos(pullAngle) * pullDistance;
     const startY = this.anchorPoint.y - Math.sin(pullAngle) * pullDistance;
     
     this.projectile = new RubberBandProjectile(this, startX, startY, vx, vy);
     
-    // Clear visuals
     this.bandGraphics.clear();
     this.trajectoryGraphics.clear();
     this.powerMeterFill.setSize(16, 0);
     
-    // Animate slingshot snap
     this.tweens.add({
       targets: this.anchorVisual,
       scaleX: 1.1,
@@ -727,7 +1241,7 @@ class GameScene extends Phaser.Scene {
   }
   
   // ============================================
-  // COMMON GAME METHODS
+  // COMMON METHODS
   // ============================================
   spawnFly() {
     const margin = 50;
@@ -742,23 +1256,19 @@ class GameScene extends Phaser.Scene {
     fly.kill();
     this.catches++;
     
-    // Show splat
     this.showSplatEffect(fly.x, fly.y);
     
-    // Update combo
     this.combo++;
     this.comboTimer = 2000;
     
-    // Calculate score
     const basePoints = 100;
     const comboMultiplier = Math.min(this.combo, 10);
-    const velocityBonus = speedBonus > 1.5 ? 50 : 0; // Bonus for powerful hits
+    const velocityBonus = speedBonus > 1.5 ? 50 : 0;
     const points = (basePoints + velocityBonus) * comboMultiplier;
     this.score += points;
     
-    // Update UI
-    this.scoreText.setText(`Score: ${this.score}`);
-    this.progressText.setText(`Catches: ${this.catches}/${this.levelConfig.targetCatches}`);
+    this.scoreText.setText(`⭐ ${this.score}`);
+    this.progressText.setText(`🪰 ${this.catches}/${this.levelConfig.targetCatches}`);
     
     if (this.combo > 1) {
       this.comboText.setText(`${this.combo}x COMBO!`);
@@ -770,27 +1280,22 @@ class GameScene extends Phaser.Scene {
       });
     }
     
-    // Velocity bonus popup
     if (velocityBonus > 0) {
       this.showBonusPopup(fly.x, fly.y - 30, 'POWER HIT!');
     }
     
     this.showPointsPopup(fly.x, fly.y, points, this.combo);
     
-    // Screen effects
-    this.cameras.main.shake(100, 0.01);
-    this.cameras.main.flash(100, 255, 255, 255, false);
+    this.cameras.main.shake(80, 0.008);
+    this.cameras.main.flash(80, 255, 255, 255, false);
     
-    // Remove from array
     this.flies = this.flies.filter(f => f !== fly);
     
-    // Check win condition
     if (this.catches >= this.levelConfig.targetCatches) {
       this.endGame(true);
       return;
     }
     
-    // Spawn new fly
     this.time.delayedCall(300, () => {
       if (this.flies.length < this.levelConfig.maxFlies && this.gameActive) {
         this.spawnFly();
@@ -800,61 +1305,80 @@ class GameScene extends Phaser.Scene {
   
   showSplatEffect(x, y) {
     const splat = this.add.container(x, y);
+    splat.setDepth(45);
     
-    const mainSplat = this.add.circle(0, 0, 15, 0x333333, 0.6);
+    const mainSplat = this.add.ellipse(0, 0, 20, 15, 0x2d2d2d, 0.7);
     splat.add(mainSplat);
     
-    for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2;
-      const dist = 15 + Math.random() * 15;
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const dist = 12 + Math.random() * 12;
       const dotX = Math.cos(angle) * dist;
       const dotY = Math.sin(angle) * dist;
-      const dot = this.add.circle(dotX, dotY, 3 + Math.random() * 4, 0x333333, 0.5);
+      const dot = this.add.circle(dotX, dotY, 2 + Math.random() * 3, 0x1a1a1a, 0.6);
       splat.add(dot);
     }
     
     this.tweens.add({
       targets: splat,
       alpha: 0,
-      duration: 2000,
+      duration: 3000,
       delay: 500,
       onComplete: () => splat.destroy()
     });
   }
   
   showPointsPopup(x, y, points, combo) {
-    const color = combo > 1 ? '#e74c3c' : '#27ae60';
-    const text = combo > 1 ? `+${points}` : `+${points}`;
+    const color = combo > 1 ? '#ffeb3b' : '#4caf50';
     
-    const popup = this.add.text(x, y, text, {
-      fontSize: combo > 1 ? '28px' : '24px',
+    const popup = this.add.text(x, y - 20, `+${points}`, {
+      fontSize: combo > 1 ? '28px' : '22px',
       fontFamily: 'Arial, sans-serif',
       color: color,
       fontStyle: 'bold',
-      stroke: '#fff',
+      stroke: '#000',
       strokeThickness: 3
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(150);
     
     this.tweens.add({
       targets: popup,
-      y: y - 60,
+      y: y - 80,
       alpha: 0,
-      scale: 1.3,
-      duration: 600,
+      scale: 1.2,
+      duration: 700,
       ease: 'Power2',
+      onComplete: () => popup.destroy()
+    });
+  }
+  
+  showPenaltyPopup(x, y, points) {
+    const popup = this.add.text(x, y, `${points}`, {
+      fontSize: '24px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#ff6b6b',
+      fontStyle: 'bold',
+      stroke: '#000',
+      strokeThickness: 3
+    }).setOrigin(0.5).setDepth(150);
+    
+    this.tweens.add({
+      targets: popup,
+      y: y - 50,
+      alpha: 0,
+      duration: 800,
       onComplete: () => popup.destroy()
     });
   }
   
   showBonusPopup(x, y, text) {
     const popup = this.add.text(x, y, text, {
-      fontSize: '20px',
+      fontSize: '18px',
       fontFamily: 'Arial, sans-serif',
-      color: '#f39c12',
+      color: '#ff9800',
       fontStyle: 'bold',
-      stroke: '#fff',
+      stroke: '#000',
       strokeThickness: 2
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(150);
     
     this.tweens.add({
       targets: popup,
@@ -876,7 +1400,6 @@ class GameScene extends Phaser.Scene {
     this.gameActive = false;
     if (this.timerEvent) this.timerEvent.remove();
     
-    // Delay before showing result
     this.time.delayedCall(500, () => {
       this.scene.start('ResultScene', {
         won: won,
@@ -890,27 +1413,22 @@ class GameScene extends Phaser.Scene {
   }
   
   update(time, delta) {
-    // Update flies
     this.flies.forEach(fly => fly.update(delta));
     
-    // Update projectile (rubber band mode)
     if (this.projectile && this.projectile.active) {
       this.projectile.update(delta);
       
-      // Check collision with flies
       this.flies.forEach(fly => {
-        if (!fly.alive || !this.projectile.active) return;
+        if (!fly.alive || !this.projectile || !this.projectile.active) return;
         
         const dist = Phaser.Math.Distance.Between(
           this.projectile.sprite.x, this.projectile.sprite.y,
           fly.x, fly.y
         );
         
-        // Alert fly to fast-moving projectile
         fly.detectThreat(this.projectile.sprite.x, this.projectile.sprite.y, this.projectile.getSpeed());
         
         if (dist < this.levelConfig.hitRadius + 10) {
-          // Hit! Speed bonus for powerful shots
           const speedBonus = this.projectile.getSpeed() / 10;
           this.catchFly(fly, this.projectile.sprite.x, this.projectile.sprite.y, speedBonus);
           this.projectile.destroy();
@@ -918,19 +1436,16 @@ class GameScene extends Phaser.Scene {
         }
       });
       
-      // Projectile out of bounds
       if (this.projectile && !this.projectile.active) {
         this.projectile = null;
         this.handleMiss();
       }
     }
     
-    // Clean up destroyed projectile
     if (this.projectile && !this.projectile.active) {
       this.projectile = null;
     }
     
-    // Update combo timer
     if (this.comboTimer > 0) {
       this.comboTimer -= delta;
       if (this.comboTimer <= 0) {
@@ -959,97 +1474,82 @@ class ResultScene extends Phaser.Scene {
   }
   
   create() {
+    // Background
     this.add.rectangle(CONFIG.width/2, CONFIG.height/2, CONFIG.width, CONFIG.height, 0x1a1a2e);
     
-    // Result header
-    const headerText = this.won ? 'LEVEL COMPLETE!' : 'TIME\'S UP!';
-    const headerColor = this.won ? '#27ae60' : '#e74c3c';
+    // Result card
+    const g = this.add.graphics();
+    g.fillStyle(0xffffff, 0.1);
+    g.fillRoundedRect(30, 120, CONFIG.width - 60, 350, 20);
     
-    this.add.text(CONFIG.width/2, 150, headerText, {
-      fontSize: '36px',
+    const headerText = this.won ? '🎉 LEVEL COMPLETE!' : '⏰ TIME\'S UP!';
+    const headerColor = this.won ? '#4caf50' : '#ff6b6b';
+    
+    this.add.text(CONFIG.width/2, 160, headerText, {
+      fontSize: '28px',
       fontFamily: 'Arial, sans-serif',
       color: headerColor,
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    // Stats
-    this.add.text(CONFIG.width/2, 250, `Catches: ${this.catches}/${this.target}`, {
-      fontSize: '24px',
+    this.add.text(CONFIG.width/2, 220, `Catches: ${this.catches}/${this.target}`, {
+      fontSize: '22px',
       fontFamily: 'Arial, sans-serif',
-      color: '#fff'
+      color: '#ffffff'
     }).setOrigin(0.5);
     
-    this.add.text(CONFIG.width/2, 300, `Score: ${this.score}`, {
-      fontSize: '28px',
+    const finalScore = this.won ? this.score + (this.timeRemaining * 10) : this.score;
+    
+    this.add.text(CONFIG.width/2, 280, `Score: ${finalScore}`, {
+      fontSize: '32px',
       fontFamily: 'Arial, sans-serif',
-      color: '#f39c12',
+      color: '#ffeb3b',
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
     if (this.won && this.timeRemaining > 0) {
-      this.add.text(CONFIG.width/2, 350, `Time Bonus: +${this.timeRemaining * 10}`, {
-        fontSize: '20px',
+      this.add.text(CONFIG.width/2, 330, `Time Bonus: +${this.timeRemaining * 10}`, {
+        fontSize: '18px',
         fontFamily: 'Arial, sans-serif',
-        color: '#3498db'
+        color: '#64b5f6'
       }).setOrigin(0.5);
     }
     
     // Buttons
-    const buttonY = 480;
+    let btnY = 500;
     
     if (this.won && LEVELS[this.level + 1]) {
-      // Next Level button
-      const nextBtn = this.add.rectangle(CONFIG.width/2, buttonY, 200, 50, 0x27ae60)
-        .setInteractive({ useHandCursor: true });
-      
-      this.add.text(CONFIG.width/2, buttonY, 'NEXT LEVEL', {
-        fontSize: '22px',
-        fontFamily: 'Arial, sans-serif',
-        color: '#fff',
-        fontStyle: 'bold'
-      }).setOrigin(0.5);
-      
-      nextBtn.on('pointerover', () => nextBtn.setFillStyle(0x2ecc71));
-      nextBtn.on('pointerout', () => nextBtn.setFillStyle(0x27ae60));
-      nextBtn.on('pointerdown', () => {
+      this.createButton(CONFIG.width/2, btnY, 'NEXT LEVEL', 0x4caf50, () => {
         this.scene.start('GameScene', { level: this.level + 1 });
       });
+      btnY += 65;
     }
     
-    // Retry button
-    const retryY = this.won && LEVELS[this.level + 1] ? buttonY + 70 : buttonY;
-    const retryBtn = this.add.rectangle(CONFIG.width/2, retryY, 200, 50, 0x3498db)
-      .setInteractive({ useHandCursor: true });
-    
-    this.add.text(CONFIG.width/2, retryY, 'RETRY', {
-      fontSize: '22px',
-      fontFamily: 'Arial, sans-serif',
-      color: '#fff',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
-    
-    retryBtn.on('pointerover', () => retryBtn.setFillStyle(0x5dade2));
-    retryBtn.on('pointerout', () => retryBtn.setFillStyle(0x3498db));
-    retryBtn.on('pointerdown', () => {
+    this.createButton(CONFIG.width/2, btnY, 'RETRY', 0x2196f3, () => {
       this.scene.start('GameScene', { level: this.level });
     });
     
-    // Menu button
-    const menuBtn = this.add.rectangle(CONFIG.width/2, retryY + 70, 200, 50, 0x95a5a6)
+    this.createButton(CONFIG.width/2, btnY + 65, 'MENU', 0x757575, () => {
+      this.scene.start('MenuScene');
+    });
+  }
+  
+  createButton(x, y, text, color, callback) {
+    const btn = this.add.rectangle(x, y, 200, 50, color, 1)
       .setInteractive({ useHandCursor: true });
     
-    this.add.text(CONFIG.width/2, retryY + 70, 'MENU', {
-      fontSize: '22px',
+    btn.setStrokeStyle(2, 0xffffff, 0.3);
+    
+    this.add.text(x, y, text, {
+      fontSize: '20px',
       fontFamily: 'Arial, sans-serif',
-      color: '#fff',
+      color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
-    menuBtn.on('pointerover', () => menuBtn.setFillStyle(0xbdc3c7));
-    menuBtn.on('pointerout', () => menuBtn.setFillStyle(0x95a5a6));
-    menuBtn.on('pointerdown', () => {
-      this.scene.start('MenuScene');
-    });
+    btn.on('pointerover', () => btn.setFillStyle(Phaser.Display.Color.ValueToColor(color).lighten(20).color));
+    btn.on('pointerout', () => btn.setFillStyle(color));
+    btn.on('pointerdown', callback);
   }
 }
 
@@ -1062,44 +1562,61 @@ class MenuScene extends Phaser.Scene {
   }
   
   create() {
+    // Background
     this.add.rectangle(CONFIG.width/2, CONFIG.height/2, CONFIG.width, CONFIG.height, 0x1a1a2e);
     
+    // Decorative flies
+    for (let i = 0; i < 5; i++) {
+      const flyX = 50 + Math.random() * (CONFIG.width - 100);
+      const flyY = 100 + Math.random() * 150;
+      this.add.circle(flyX, flyY, 8, 0x333333, 0.3);
+      this.add.circle(flyX - 5, flyY - 3, 5, 0x555555, 0.2);
+      this.add.circle(flyX + 5, flyY - 3, 5, 0x555555, 0.2);
+    }
+    
     // Title
-    this.add.text(CONFIG.width/2, 150, '🪰', {
-      fontSize: '80px'
+    this.add.text(CONFIG.width/2, 180, '🪰', {
+      fontSize: '90px'
     }).setOrigin(0.5);
     
-    this.add.text(CONFIG.width/2, 250, 'FLY CATCHER', {
-      fontSize: '42px',
+    this.add.text(CONFIG.width/2, 290, 'FLY CATCHER', {
+      fontSize: '40px',
       fontFamily: 'Arial, sans-serif',
-      color: '#fff',
+      color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
+    this.add.text(CONFIG.width/2, 340, 'Swat the flies, save the furniture!', {
+      fontSize: '16px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#aaaaaa'
+    }).setOrigin(0.5);
+    
     // Level buttons
-    let btnY = 380;
+    let btnY = 420;
     
     Object.keys(LEVELS).forEach(levelNum => {
       const level = LEVELS[levelNum];
       
-      const btn = this.add.rectangle(CONFIG.width/2, btnY, 280, 60, 0x27ae60)
+      const btn = this.add.rectangle(CONFIG.width/2, btnY, 280, 70, 0x4caf50, 1)
         .setInteractive({ useHandCursor: true });
+      btn.setStrokeStyle(2, 0xffffff, 0.2);
       
-      this.add.text(CONFIG.width/2, btnY - 8, `Level ${levelNum}: ${level.name}`, {
+      this.add.text(CONFIG.width/2, btnY - 10, `Level ${levelNum}: ${level.name}`, {
         fontSize: '20px',
         fontFamily: 'Arial, sans-serif',
-        color: '#fff',
+        color: '#ffffff',
         fontStyle: 'bold'
       }).setOrigin(0.5);
       
-      this.add.text(CONFIG.width/2, btnY + 14, level.instructions, {
+      this.add.text(CONFIG.width/2, btnY + 15, level.instructions, {
         fontSize: '12px',
         fontFamily: 'Arial, sans-serif',
-        color: '#ccc'
+        color: '#cccccc'
       }).setOrigin(0.5);
       
-      btn.on('pointerover', () => btn.setFillStyle(0x2ecc71));
-      btn.on('pointerout', () => btn.setFillStyle(0x27ae60));
+      btn.on('pointerover', () => btn.setFillStyle(0x66bb6a));
+      btn.on('pointerout', () => btn.setFillStyle(0x4caf50));
       btn.on('pointerdown', () => {
         this.scene.start('GameScene', { level: parseInt(levelNum) });
       });
